@@ -156,6 +156,8 @@
         .res-voltar { position: absolute; top: 1.5vh; left: 1.5vw; font-size: 1.8vh; padding: 0.5vh 0.8vw; border-radius: 0.6vh; cursor: pointer; background: transparent; color: var(--text-secondary); border: 1px solid var(--text-secondary); }
         .res-voltar:hover { color: var(--text-primary, #fff); border-color: var(--text-primary, #fff); }
         .res-voltar[hidden] { display: none; }
+        /* lista de pedidos da carga: datas em duas colunas (esquerda / direita) */
+        .res-item-linha { display: flex; justify-content: space-between; gap: 1vw; }
     </style>
 </head>
 <body>
@@ -746,8 +748,10 @@ function rodapeEntregas() {
     if (!entregas || !entregas.atualizadoEm) return "";
     return '<div class="res-rodape">Dados de entrega atualizados em ' + escapeHtml(formatarAtualizacao(entregas.atualizadoEm)) + "</div>";
 }
-function linhaDados(rotulo, data) {
-    return data ? '<div class="res-linha">' + rotulo + ": " + escapeHtml(data.txt) + "</div>" : "";
+function linhaDados(rotulo, data, negrito) {
+    if (!data) return "";
+    var valor = negrito ? '<span style="font-weight: 700">' + escapeHtml(data.txt) + "</span>" : escapeHtml(data.txt);
+    return '<div class="res-linha">' + rotulo + ": " + valor + "</div>";
 }
 function statusHtml(texto, cor) {
     return '<div class="res-status" style="color: ' + cor + '">' + escapeHtml(texto) + "</div>";
@@ -771,17 +775,31 @@ function blocoOcorrencia(reg, mostrarPedido) {
         html += '<div class="res-carga">Carga: ' + linkCarga(reg.carga) + " · Status: " + escapeHtml(statusDaCarga(reg.carga, achado)) + "</div>";
     }
     html += statusHtml(sit.texto, sit.cor);
-    sit.detalhes.forEach(function (d) { html += linhaDados(d[0], d[1]); });
-    html += linhaDados("Data de expedição", reg.expedicao);
+    if (reg.carga) html += '<div class="res-linha">Transportadora: ' + escapeHtml(transportadoraDaCarga(reg.carga)) + "</div>";
+    sit.detalhes.forEach(function (d) { html += linhaDados(d[0], d[1], d[0] === "Data entregue"); });
+    html += linhaDados("Data de expedição", reg.expedicao, true);
+    if (reg.carga) html += linhasPrevisao(reg.carga, [reg], true);   // Previsão de expedição (Trello) desta carga
     return html + "</div>";
 }
-// Linha da lista de pedidos na pesquisa por carga (a linha toda abre a pesquisa do pedido).
+// Uma linha de duas colunas na lista de pedidos da carga: rótulo/data à esquerda e à direita (célula vazia mantém o alinhamento).
+function celulaData(rotulo, data) {
+    return "<span>" + (data ? escapeHtml(rotulo + ": " + data.txt) : "") + "</span>";
+}
+function linhaDupla(rotEsq, dataEsq, rotDir, dataDir) {
+    if (!dataEsq && !dataDir) return "";
+    return '<div class="res-item-det res-item-linha">' + celulaData(rotEsq, dataEsq) + celulaData(rotDir, dataDir) + "</div>";
+}
+// Linha da lista de pedidos na pesquisa por carga (a linha toda abre a pesquisa do pedido):
+//   pedido ---------- situação
+//   Data entregue ---- Data expedição
+//   Previsão entrega -- Previsão expedição (Trello, a mesma para todos os pedidos da carga)
 function itemLista(reg, coluna) {
     var sit = situacaoPedido(reg, coluna);
-    var det = sit.detalhes.concat([["Data de expedição", reg.expedicao]]).filter(function (d) { return d[1]; }).map(function (d) { return d[0] + ": " + d[1].txt; }).join(" · ");
+    var prev = previsoes && previsoes.porCarga[reg.carga];
     return '<div class="res-item res-clicavel" role="button" data-pedido="' + escapeHtml(reg.pedido) + '"><div class="res-item-topo"><span class="res-item-ped">' + escapeHtml(pedidoCom6(reg.pedido)) + "</span>" +
         '<span class="res-item-st" style="color: ' + sit.cor + '">' + escapeHtml(sit.texto) + "</span></div>" +
-        (det ? '<div class="res-item-det">' + escapeHtml(det) + "</div>" : "") + "</div>";
+        linhaDupla("Data entregue", reg.entregue, "Data expedição", reg.expedicao) +
+        linhaDupla("Previsão entrega", reg.previsao, "Previsão expedição", prev ? prev.data : null) + "</div>";
 }
 // Botão ← Voltar do modal de pesquisa: criado uma vez, antes do título; só aparece quando há para onde voltar.
 function atualizarBotaoVoltar() {
@@ -886,10 +904,12 @@ function buscarCarga(valor) {
             'Carga não encontrada.<div class="res-orienta">Por favor, verifique com o time de Transportes.</div>' + rodapeEntregas();
         return;
     }
-    var html = '<div class="res-pedido">Carga: ' + escapeHtml(carga) + "</div>" +
-        '<div class="res-carga">Status: ' + escapeHtml(statusDaCarga(carga, achado)) + "</div>";
+    // Ordem: Carga, CD avançado (se houver), Status, Transportadora, depois a Previsão de expedição (Trello).
+    var html = '<div class="res-pedido">Carga: ' + escapeHtml(carga) + "</div>";
     if (achado && achado.item.nome_cd) html += '<div class="res-cd">' + escapeHtml(achado.item.nome_cd) + "</div>";
-    html += blocoPrevisao(carga, regs);   // Previsão de expedição, Transportadora, previsto x realizado (Trello)
+    html += '<div class="res-carga">Status: ' + escapeHtml(statusDaCarga(carga, achado)) + "</div>";
+    html += '<div class="res-carga">Transportadora: ' + escapeHtml(transportadoraDaCarga(carga)) + "</div>";
+    html += blocoPrevisao(carga, regs);   // Previsão de expedição, previsto x realizado e reprogramações (Trello)
     if (regs.length === 0) {
         html += '<div class="res-orienta">Pedidos ainda não constam na planilha do Transporte.</div>';
     } else {
@@ -908,14 +928,13 @@ var PREVISOES_REST = typeof ENTREGAS_REST === "string" ? ENTREGAS_REST.replace(/
 var HISTORICO_REST = PREVISOES_REST ? PREVISOES_REST + "_historico" : "";
 var previsoes = null;               // { porCarga: { carga: { data, transportadora } }, hist: { carga: [{ de, para }] } }
 var ultimaLeituraPrevisoes = 0;
-var SEMANA_PT = ["domingo", "segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado"];
 
-// "aaaa-mm-dd" (ou com horário) -> { txt: "dd/mm/aaaa", t, semana } ou null.
+// "aaaa-mm-dd" (ou com horário) -> { txt: "dd/mm/aaaa", t } ou null.
 function parseDataIso(txt) {
     var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(txt || ""));
     if (!m) return null;
     var t = Date.UTC(+m[1], +m[2] - 1, +m[3]);
-    return { txt: m[3] + "/" + m[2] + "/" + m[1], t: t, semana: SEMANA_PT[new Date(t).getUTCDay()] };
+    return { txt: m[3] + "/" + m[2] + "/" + m[1], t: t };
 }
 function consultarTabela(url) {
     return fetch(url, { headers: { apikey: SUPABASE_ANON, "x-senha-painel": senhaPainel, Accept: "application/json" }, cache: "no-store" })
@@ -954,26 +973,30 @@ function expedicaoReal(regs) {
     });
     return melhor;
 }
-// Bloco do modal da carga: Previsão de expedição, Transportadora, previsto x realizado e reprogramações. Vazio se não há previsão.
-function blocoPrevisao(carga, regs) {
+// Linhas da Previsão de expedição de uma carga: a previsão (só a data), a expedição realizada (só no modal da carga;
+// no pedido/CRM ela já aparece em "Data de expedição", resumido = true) e as reprogramações. Vazio se não há previsão.
+function linhasPrevisao(carga, regs, resumido) {
     var p = previsoes && previsoes.porCarga[carga];
     if (!p) return "";
-    var html = '<div class="res-bloco">' +
-        '<div class="res-linha">Previsão de expedição: ' + escapeHtml(p.data.txt + " (" + p.data.semana + ")") + "</div>";
-    if (p.transportadora) html += '<div class="res-linha">Transportadora: ' + escapeHtml(p.transportadora) + "</div>";
-    var real = expedicaoReal(regs);
-    if (real) {
-        var dias = Math.round((real.t - p.data.t) / DIA_MS);
-        var cmp = dias === 0 ? "no dia previsto" : dias > 0 ? dias + (dias === 1 ? " dia depois do previsto" : " dias depois do previsto")
-            : -dias + (dias === -1 ? " dia antes do previsto" : " dias antes do previsto");
-        html += '<div class="res-linha">Expedição realizada: ' + escapeHtml(real.txt) + " · " + escapeHtml(cmp) + "</div>";
-    }
+    var html = '<div class="res-linha">Previsão de expedição: ' + escapeHtml(p.data.txt) + "</div>";
+    var real = resumido ? null : expedicaoReal(regs);
+    if (real) html += '<div class="res-linha">Expedição realizada: ' + escapeHtml(real.txt) + "</div>";
     var mud = ((previsoes.hist[carga] || []).filter(function (h) { return h.de && h.para; }));
     if (mud.length) {
         html += '<div class="res-linha">Reprogramada ' + mud.length + (mud.length === 1 ? " vez: " : " vezes: ") +
             escapeHtml(mud.map(function (h) { return h.de.txt.slice(0, 5) + " → " + h.para.txt.slice(0, 5); }).join(" · ")) + "</div>";
     }
-    return html + "</div>";
+    return html;
+}
+// Transportadora da carga (vem do título do card no Trello); sem informação ainda: "Não informada".
+function transportadoraDaCarga(carga) {
+    var p = previsoes && previsoes.porCarga[carga];
+    return p && p.transportadora ? p.transportadora : "Não informada";
+}
+// Bloco do modal da carga.
+function blocoPrevisao(carga, regs) {
+    var linhas = linhasPrevisao(carga, regs, false);
+    return linhas ? '<div class="res-bloco">' + linhas + "</div>" : "";
 }
 
 // Chave Pedido | Carga | CRM na caixa de busca.
@@ -1008,6 +1031,13 @@ document.querySelector(".main-container").addEventListener("click", function (e)
     var titulo = card.querySelector(".card-title");
     var carga = titulo ? cargaNumero(titulo.textContent) : "";
     if (carga) abrirVista("carga", carga, "novo");
+});
+// Tecla Esc fecha o modal aberto (pesquisa, acesso restrito ou administrador); o portão de senha não fecha.
+document.addEventListener("keydown", function (e) {
+    if (e.key !== "Escape") return;
+    ["modal-search", "modal-pin", "modal-admin"].forEach(function (id) {
+        if (document.getElementById(id).classList.contains("active")) fecharModal(id);
+    });
 });
 // Clique em carga ou pedido dentro do modal, e botão Voltar.
 document.getElementById("search-result-content").addEventListener("click", function (e) {
