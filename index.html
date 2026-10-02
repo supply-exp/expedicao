@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Expedição - Gênica</title>
+    <style>
+        :root {
+            --genica-white: #FFFFFF;
+            --genica-green-dark: #1B5E20;
+            --genica-gray: #CCCCCC;
+            --genica-black: #161616;
+            --genica-green-mid: #2E7D32;
+            --genica-green-light: #A4E745;
+            --genica-yellow: #FFD54F;
+            --genica-orange: #FFB200;
+            --genica-blue-light: #B8DBFE;
+            --genica-blue-mid: #B8DBFE;
+            --genica-red: #F24D70;
+            --bg-viewport: #121212;
+            --bg-panel: #1e1e1e;
+            --bg-card: #2d2d2d;
+            --border-color: #333333;
+            --text-primary: #e0e0e0;
+            --text-secondary: #a0a0a0;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background-color: var(--bg-viewport); color: var(--text-primary); font-family: 'Segoe UI', system-ui, sans-serif; height: 100vh; display: flex; flex-direction: column; padding: 1vh 1vw; overflow: hidden; position: relative; }
+
+        .admin-container { position: absolute; top: 3.0vh; right: 1.5vw; z-index: 100; }
+        .icon-btn { width: 3vh; height: 3vh; fill: var(--text-secondary); cursor: pointer; transition: fill 0.2s; }
+        .icon-btn:hover { fill: var(--genica-green-light); }
+        .admin-icon:hover { fill: var(--genica-yellow); }
+
+        .search-container { position: absolute; right: 1vw; display: flex; align-items: center; background-color: var(--bg-card); border: 1px solid var(--border-color); border-radius: 20px; padding: 0.5vh; transition: all 0.3s ease; }
+        .search-input { width: 0; opacity: 0; border: none; background: transparent; color: var(--text-primary); font-size: 1.6vh; outline: none; transition: width 0.3s ease, opacity 0.3s ease; }
+        .search-container:hover .search-input, .search-input:focus { width: 15vw; opacity: 1; padding-left: 0.5vw; }
+
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.85); z-index: 2000; display: flex; justify-content: center; align-items: center; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
+        .modal-overlay.active { opacity: 1; pointer-events: auto; }
+        .modal-content { background-color: var(--bg-panel); border: 1px solid var(--border-color); border-radius: 8px; padding: 3vh; width: 40vw; max-height: 80vh; display: flex; flex-direction: column; position: relative; box-shadow: 0 10px 30px rgba(0,0,0,0.7); }
+        .modal-close { position: absolute; top: 1.5vh; right: 1.5vw; font-size: 3vh; color: var(--text-secondary); cursor: pointer; line-height: 1; }
+        .modal-close:hover { color: var(--genica-red); }
+        .modal-title { font-size: 2.5vh; font-weight: bold; color: var(--text-primary); margin-bottom: 2vh; border-bottom: 2px solid var(--border-color); padding-bottom: 1vh; text-align: center; }
+
+        .pin-container { display: flex; flex-direction: column; align-items: center; gap: 2vh; }
+        .pin-input { background-color: var(--bg-viewport); border: 1px solid var(--border-color); color: var(--text-primary); font-size: 2vh; padding: 1vh; border-radius: 4px; text-align: center; width: 50%; outline: none; }
+        .pin-input:focus { border-color: var(--genica-yellow); }
+
+        .admin-list { overflow-y: auto; display: flex; flex-direction: column; gap: 1.5vh; padding-right: 1vw; }
+        .admin-item { background-color: var(--bg-card); border: 1px solid var(--border-color); border-left: 5px solid var(--genica-yellow); border-radius: 6px; padding: 1.5vh; display: flex; justify-content: space-between; align-items: center; }
+        .admin-item.finalizado { border-left-color: var(--genica-gray); opacity: 0.6; }
+        .admin-item-info { display: flex; flex-direction: column; gap: 0.5vh; }
+        .admin-item-title { font-size: 1.8vh; font-weight: bold; }
+        .admin-item-cd { font-size: 1.4vh; color: var(--genica-yellow); }
+        .admin-actions { display: flex; gap: 1vw; }
+        
+        .btn { padding: 1vh 1vw; border: none; border-radius: 4px; font-size: 1.4vh; font-weight: bold; cursor: pointer; color: var(--bg-viewport); transition: opacity 0.2s; }
+        .btn:hover { opacity: 0.8; }
+        .btn:disabled { opacity: 0.3; cursor: not-allowed; }
+        .btn-carregando { background-color: var(--genica-blue-mid); }
+        .btn-carregado { background-color: var(--genica-green-light); }
+        .btn-transito { background-color: var(--genica-orange); }
+        .btn-desfazer { background-color: var(--genica-gray); color: var(--bg-viewport); }
+        .btn-remover { background-color: var(--genica-red); color: var(--genica-white); }
+        .admin-item.alerta { border-left-color: var(--genica-red); }
+        .admin-item-aviso { font-size: 1.3vh; color: var(--genica-red); }
+        .btn-liberar { background-color: var(--genica-yellow); }
+        .admin-remocao { display: flex; align-items: center; gap: 1vw; min-height: 3.6vh; margin-bottom: 1.5vh; font-size: 1.4vh; color: var(--text-secondary); }
+        .admin-search { margin-bottom: 2vh; display: flex; justify-content: center; }
+        .admin-search .pin-input { width: 100%; text-align: left; }
+        .admin-vazio { text-align: center; color: var(--text-secondary); font-size: 1.6vh; padding: 2vh; }
+
+        .search-result { text-align: center; font-size: 2vh; padding: 2vh; }
+        .filter-container { display: flex; justify-content: center; margin-bottom: 2vh; }
+        .filter-label { font-size: 1.6vh; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; gap: 0.5vw; }
+
+        .main-container { display: flex; flex-direction: column; height: 100%; gap: 1.5vh; margin-top: 1vh; }
+        .top-section { flex: 0 0 65%; display: grid; grid-template-columns: repeat(8, 1fr); gap: 0.8vw; min-height: 0; }
+        .kanban-col { background-color: var(--bg-panel); border: 1px solid var(--border-color); border-radius: 8px; display: flex; flex-direction: column; overflow: hidden; height: 100%; min-height: 0; }
+        .col-header { text-align: center; padding: 1vh; white-space: nowrap; font-size: 1.8vh; font-weight: bold; background-color: var(--bg-viewport); border-bottom: 3px solid; text-transform: uppercase; color: var(--text-primary); }
+        .header-separar { border-color: var(--genica-yellow); } .header-separando { border-color: var(--genica-blue-mid); } .header-separado { border-color: var(--genica-blue-mid); }
+        .header-faturar { border-color: var(--genica-green-light); } .header-acarregar { border-color: var(--genica-yellow); } .header-carregando { border-color: var(--genica-blue-mid); }
+        .header-carregado { border-color: var(--genica-green-light); } .header-transito { border-color: var(--genica-orange); padding-right: 1.8vw; } /* espaço para o cadeado do administrador */
+
+        .card-list { padding: 1vh; overflow-y: auto; display: flex; flex-direction: column; gap: 1vh; flex: 1; min-height: 0; }
+        .card { background-color: var(--bg-card); border-radius: 6px; padding: 1vh; font-size: 1.4vh; display: flex; flex-direction: column; gap: 0.5vh; box-shadow: 0 2px 4px rgba(0,0,0,0.4); border: 1px solid var(--border-color); border-left: 6px solid #555; }
+        .card-title { font-weight: bold; font-size: 1.6vh; color: var(--text-primary); }
+        .card-info { color: var(--text-secondary); font-weight: 500; }
+        .c-alerta { border-left-color: var(--genica-red) !important; }
+        .c-separar, .c-acarregar { border-left-color: var(--genica-yellow); } .c-faturar { border-left-color: var(--genica-green-light); } .c-separando, .c-separado, .c-carregando { border-left-color: var(--genica-blue-mid); }
+        .c-carregado { border-left-color: var(--genica-green-light); } .c-transito { border-left-color: var(--genica-orange); }
+        .status-row { display: flex; justify-content: space-between; align-items: center; }
+        .status-dot { height: 1.2vh; width: 1.2vh; border-radius: 50%; display: inline-block; border: 1px solid rgba(0,0,0,0.2); }
+        .dot-red { background-color: var(--genica-red); } .dot-green { background-color: var(--genica-green-light); }
+
+        .bottom-section { flex: 0 0 32%; display: grid; grid-template-columns: 3fr 1fr; grid-template-rows: 1fr; gap: 1vw; min-height: 0; }
+        .finalizados-panel { background-color: var(--bg-panel); border: 1px solid var(--border-color); border-radius: 8px; display: flex; flex-direction: column; overflow: hidden; height: 100%; min-height: 0; }
+        .finalizados-header { background-color: var(--bg-viewport); padding: 1vh; font-size: 2vh; font-weight: bold; border-bottom: 1px solid var(--border-color); position: relative; display: flex; justify-content: center; align-items: center; }
+        .finalizados-grid { display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(4, 1fr); gap: 0.6vh; padding: 1vh; flex: 1; overflow: hidden; min-height: 0; }
+        .card-finalizado { background-color: var(--bg-card); border-radius: 4px; padding: 0.5vh 1vh; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; border: 1px solid var(--border-color); border-left: 4px solid #555555; box-shadow: 0 2px 3px rgba(0,0,0,0.2); overflow: hidden; min-height: 0; }
+        .card-finalizado .card-title { font-size: 1.6vh; font-weight: bold; color: var(--text-primary); width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .card-finalizado .card-info { color: var(--text-secondary); font-size: 1.4vh; font-weight: 500; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        .clock-panel { background-color: var(--bg-panel); border: 1px solid var(--border-color); border-radius: 8px; display: flex; justify-content: center; align-items: center; flex-direction: column; border-top: 3px solid var(--genica-green-light); padding: 2vh; }
+        .panel-logo { max-width: 65%; max-height: 30%; object-fit: contain; margin-bottom: 1.5vh; }
+        #clock-time { font-size: 7vh; font-weight: bold; color: var(--genica-green-light); letter-spacing: 2px; line-height: 1; }
+        #clock-date { font-size: 3vh; color: var(--text-secondary); margin-top: 1vh; }
+
+        ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: var(--bg-viewport); } ::-webkit-scrollbar-thumb { background: #444444; border-radius: 3px; } ::-webkit-scrollbar-thumb:hover { background: #666666; }
+
+        .protheus-alert { position: fixed; top: 0; left: 0; right: 0; z-index: 1000; padding: 1.1vh 2vw; background: #8b1e1e; color: #ffffff; border-bottom: 2px solid #ff6b6b; font-size: 1.8vh; font-weight: 700; text-align: center; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45); }
+        .protheus-alert[hidden] { display: none; }
+    
+        /* ---- acréscimos do painel novo ---- */
+        :root { --c-green-light: var(--genica-green-light); --c-yellow: var(--genica-yellow); --c-blue-light: var(--genica-blue-light); --c-red: var(--genica-red); }
+        .search-result { text-align: center; font-size: 2vh; padding: 2vh; overflow-y: auto; min-height: 0; }
+        .res-pedido { font-size: 2.5vh; font-weight: bold; color: var(--c-green-light); }
+        .res-carga { font-size: 1.8vh; color: var(--text-secondary); margin-top: 0.6vh; }
+        .res-status { font-size: 2.2vh; font-weight: bold; margin: 2vh 0 1.2vh; line-height: 1.3; }
+        .res-linha { font-size: 1.7vh; color: var(--text-secondary); line-height: 1.6; }
+        .res-rodape { font-size: 1.3vh; color: var(--text-secondary); margin-top: 2.4vh; border-top: 1px solid var(--border-color); padding-top: 1.2vh; }
+        .res-orienta { font-size: 1.6vh; color: var(--text-secondary); margin-top: 1.5vh; }
+        .res-cd { font-size: 1.8vh; color: var(--c-yellow); margin-top: 0.6vh; }
+        .res-bloco { padding-top: 1.6vh; margin-top: 1.6vh; border-top: 1px solid var(--border-color); }
+        .res-pedido + .res-bloco { border-top: none; margin-top: 0; }
+        .res-resumo { font-size: 1.7vh; color: var(--text-primary); margin: 1.6vh 0 1vh; }
+        .res-lista { max-height: 42vh; overflow-y: auto; text-align: left; border-top: 1px solid var(--border-color); }
+        .res-item { padding: 0.9vh 0.5vw; border-bottom: 1px solid var(--border-color); }
+        .res-item-topo { display: flex; justify-content: space-between; gap: 1vw; font-size: 1.7vh; }
+        .res-item-ped { font-weight: bold; color: var(--text-primary); white-space: nowrap; }
+        .res-item-st { font-weight: bold; text-align: right; }
+        .res-item-det { font-size: 1.3vh; color: var(--text-secondary); margin-top: 0.3vh; }
+        .modo-busca { display: flex; gap: 0.3vw; max-width: 0; opacity: 0; overflow: hidden; transition: max-width 0.3s ease, opacity 0.3s ease; }
+        .search-container:hover .modo-busca, .search-container:focus-within .modo-busca { max-width: 14vw; opacity: 1; margin-left: 0.5vw; }
+        .modo-btn { border: 1px solid var(--border-color); background: transparent; color: var(--text-secondary); font-size: 1.3vh; padding: 0.3vh 0.7vw; border-radius: 12px; cursor: pointer; }
+        .modo-btn.ativo { background: var(--c-green-light); border-color: var(--c-green-light); color: var(--bg-viewport); font-weight: bold; }
+        .search-container { flex-direction: row; }
+        .search-container:hover .modo-busca, .search-container:focus-within .modo-busca { max-width: 20vw; }
+        .pin-erro { color: var(--genica-red); font-size: 1.5vh; min-height: 2vh; text-align: center; }
+        .admin-quem { font-size: 1.4vh; color: var(--text-secondary); text-align: center; margin-bottom: 1.5vh; }
+        .admin-corrigir { border: 1px solid var(--border-color, #444); border-radius: 0.8vh; padding: 1.2vh 1.2vw; margin-bottom: 1.5vh; }
+        .admin-corrigir-titulo { font-size: 1.6vh; font-weight: bold; margin-bottom: 1vh; color: var(--text-primary, #fff); }
+        .admin-corrigir-linha { display: flex; gap: 0.8vw; align-items: center; }
+        .admin-corrigir-linha .pin-input { flex: 1; min-width: 0; }
+        .corrigir-select { font-size: 1.8vh; padding: 0.8vh 0.6vw; border-radius: 0.6vh; background: var(--bg-card, #222); color: var(--text-primary, #fff); border: 1px solid var(--border-color, #555); }
+        .admin-corrigir-ajuda { font-size: 1.3vh; color: var(--text-secondary); margin-top: 0.8vh; }
+        .campo-rotulo { color: var(--text-secondary); font-size: 1.5vh; align-self: flex-start; margin-left: 25%; }
+        /* navegação no modal de pesquisa (02/10/2026): card, carga e pedido clicáveis + Voltar */
+        .card, .card-finalizado { cursor: pointer; }
+        .res-link { cursor: pointer; text-decoration: underline; text-underline-offset: 0.3vh; }
+        .res-link:hover { filter: brightness(1.3); }
+        .res-clicavel { cursor: pointer; }
+        .res-clicavel:hover { filter: brightness(1.25); }
+        .res-voltar { position: absolute; top: 1.5vh; left: 1.5vw; font-size: 1.8vh; padding: 0.5vh 0.8vw; border-radius: 0.6vh; cursor: pointer; background: transparent; color: var(--text-secondary); border: 1px solid var(--text-secondary); }
+        .res-voltar:hover { color: var(--text-primary, #fff); border-color: var(--text-primary, #fff); }
+        .res-voltar[hidden] { display: none; }
+    </style>
+</head>
+<body>
+
+    <div id="protheus-alert" class="protheus-alert" role="alert" hidden></div>
+
+    <div class="admin-container">
+        <svg class="icon-btn admin-icon" id="btn-open-pin" viewBox="0 0 24 24">
+            <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
+        </svg>
+    </div>
+
+    <div class="modal-overlay active" id="modal-gate">
+        <div class="modal-content" style="width: 25vw;">
+            <div class="modal-title">Painel de Expedição</div>
+            <div class="pin-container">
+                <label for="gate-input" style="color: var(--text-secondary);">Digite a senha de visualização:</label>
+                <input type="password" id="gate-input" class="pin-input" placeholder="Senha" autocomplete="off" autocapitalize="off" spellcheck="false">
+                <button class="btn btn-carregado" id="btn-gate">Entrar</button>
+                <div class="pin-erro" id="gate-erro"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="modal-search">
+        <div class="modal-content" style="width: 30vw;">
+            <span class="modal-close" onclick="fecharModal('modal-search')">&times;</span>
+            <div class="modal-title" id="modal-search-titulo">Pesquisa de Pedido</div>
+            <div id="search-result-content" class="search-result">Buscando...</div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="modal-pin">
+        <div class="modal-content" style="width: 25vw;">
+            <span class="modal-close" onclick="fecharModal('modal-pin')">&times;</span>
+            <div class="modal-title">Acesso Restrito</div>
+            <div class="pin-container">
+                <label for="usuario-input" class="campo-rotulo">Usuário (nome.sobrenome)</label>
+                <input type="text" id="usuario-input" class="pin-input" placeholder="usuário" autocomplete="off" autocapitalize="off" spellcheck="false">
+                <label for="pin-input" class="campo-rotulo">PIN</label>
+                <input type="password" id="pin-input" class="pin-input" placeholder="****" autocomplete="off" autocapitalize="off" spellcheck="false">
+                <button class="btn btn-carregado" id="btn-submit-pin">Acessar</button>
+                <div class="pin-erro" id="pin-erro"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="modal-admin">
+        <div class="modal-content" style="width: 50vw;">
+            <span class="modal-close" onclick="fecharModal('modal-admin')">&times;</span>
+            <div class="modal-title">Gestão de Status das Cargas</div>
+            <div class="admin-quem" id="admin-quem"></div>
+
+            <div class="admin-corrigir" id="admin-corrigir" hidden>
+                <div class="admin-corrigir-titulo">Corrigir status (só administrador)</div>
+                <div class="admin-corrigir-linha">
+                    <input type="text" id="corrigir-carga" class="pin-input" placeholder="Carga (ex.: 1456)" inputmode="numeric" autocomplete="off">
+                    <select id="corrigir-etapa" class="corrigir-select">
+                        <option value="A_SEPARAR">A Separar</option>
+                        <option value="SEPARANDO">Separando</option>
+                        <option value="SEPARADO">Separado</option>
+                        <option value="FATURAR">Faturar</option>
+                        <option value="A_CARREGAR">A Carregar</option>
+                        <option value="CARREGANDO">Carregando</option>
+                        <option value="CARREGADO">Carregado</option>
+                        <option value="EM_TRANSITO" selected>Em trânsito</option>
+                        <option value="ENTREGUE">Entregue</option>
+                    </select>
+                    <button class="btn btn-carregado" id="btn-corrigir">Aplicar</button>
+                </div>
+                <div class="admin-corrigir-ajuda">A carga vai para essa etapa e o Protheus só pode avançá-la, nunca puxá-la de volta. Para voltar, use Desfazer ou corrija de novo.</div>
+                <div class="pin-erro" id="corrigir-msg"></div>
+            </div>
+
+            <div class="admin-search">
+                <input type="text" id="admin-search-input" class="pin-input" placeholder="Buscar carga (ex.: 1400)" autocomplete="off" oninput="renderizarAdmin()">
+            </div>
+
+            <div class="filter-container">
+                <label class="filter-label">
+                    <input type="checkbox" id="toggle-finalizados" onchange="renderizarAdmin()">
+                    Exibir Cargas Entregues
+                </label>
+            </div>
+
+            <div class="admin-list" id="admin-list-content"></div>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <div class="top-section">
+            <div class="kanban-col"><div class="col-header header-separar">A Separar</div><div class="card-list"></div></div>
+            <div class="kanban-col"><div class="col-header header-separando">Separando</div><div class="card-list"></div></div>
+            <div class="kanban-col"><div class="col-header header-separado">Separado</div><div class="card-list"></div></div>
+            <div class="kanban-col"><div class="col-header header-faturar">Faturar</div><div class="card-list"></div></div>
+            <div class="kanban-col"><div class="col-header header-acarregar">A Carregar</div><div class="card-list"></div></div>
+            <div class="kanban-col"><div class="col-header header-carregando">Carregando</div><div class="card-list"></div></div>
+            <div class="kanban-col"><div class="col-header header-carregado">Carregado</div><div class="card-list"></div></div>
+            <div class="kanban-col"><div class="col-header header-transito">Em Trânsito</div><div class="card-list"></div></div>
+        </div>
+        <div class="bottom-section">
+            <div class="finalizados-panel">
+                <div class="finalizados-header">
+                    <span>FINALIZADO / ENTREGUE</span>
+                    <div class="search-container">
+                        <svg class="icon-btn search-icon" viewBox="0 0 24 24" onclick="document.getElementById('search-input').focus()">
+                            <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+                        </svg>
+                        <div class="modo-busca" id="modo-busca">
+                            <button type="button" class="modo-btn ativo" data-modo="pedido">Pedido</button>
+                            <button type="button" class="modo-btn" data-modo="carga">Carga</button>
+                            <button type="button" class="modo-btn" data-modo="crm">CRM</button>
+                        </div>
+                        <input type="text" id="search-input" class="search-input" placeholder="Buscar pedido (nº)…" inputmode="numeric">
+                    </div>
+                </div>
+                <div class="finalizados-grid" id="finalizados-grid"></div>
+            </div>
+            <div class="clock-panel">
+                <div id="clock-time">00:00:00</div>
+                <div id="clock-date">--/--/----</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Supabase (chave pública "anon": só lê o que o banco libera; a service_role nunca entra aqui).
+        var SUPABASE_URL = "https://ntywleccrzvbczehqwhf.supabase.co";   // ex.: https://abcdxyz.supabase.co
+        var SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im50eXdsZWNjcnp2YmN6ZWhxd2hmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA3OTExODYsImV4cCI6MjEwNjM2NzE4Nn0.bS_nN-eIGF58rwLgnbeZNZVS0TYaseGyNPkB7b8pL-Y";       // Project Settings > API Keys (anon / publishable)
+        var PAINEL_URL = SUPABASE_URL + "/rest/v1/quadro_painel";
+        var ADMIN_URL = SUPABASE_URL + "/functions/v1/admin";
+        // Planilha de entregas do Transporte (pedido, carga, CRM): guardada no Supabase pelo script do PC.
+        var ENTREGAS_REST = SUPABASE_URL + "/rest/v1/entregas";
+        var INTERVALO_ENTREGAS_MS = 10 * 60 * 1000;
+        var INTERVALO_PAINEL_MS = 10 * 1000;
+        var LIMITE_ATRASO_MS = 3 * 60 * 1000;               // sem coleta nova há mais que isso: avisa na tela
+        var CHAVE_SENHA = "painel-expedicao-senha";
+
+        var COLUNAS = ["a_separar", "separando", "separado", "faturar", "a_carregar", "carregando", "carregado", "em_transito"];
+        var CLASSE_COR = {
+            a_separar: "c-separar", separando: "c-separando", separado: "c-separado", faturar: "c-faturar",
+            a_carregar: "c-acarregar", carregando: "c-carregando", carregado: "c-carregado", em_transito: "c-transito"
+        };
+        var DOM_COLUNA = {
+            a_separar: ".header-separar", separando: ".header-separando", separado: ".header-separado", faturar: ".header-faturar",
+            a_carregar: ".header-acarregar", carregando: ".header-carregando", carregado: ".header-carregado", em_transito: ".header-transito"
+        };
+
+        var senhaPainel = "";
+        var ultimoHash = "";
+        var ultimosDados = null;     // { colunas: { <coluna>: [...], finalizado: histórico completo } } — usado pela pesquisa
+        var entregas = null;         // { porPedido, porCarga, atualizadoEm } após a primeira leitura do Gist de entregas
+        var entregasErro = false;
+        var sessaoAdmin = null;      // { usuario, pin, perfil, nome } — só em memória; some ao fechar a tela de administrador
+        var adminCds = [];
+        var painelIniciado = false;
+
+        // ---- utilitários ----
+        function abrirModal(id) { document.getElementById(id).classList.add("active"); }
+        function fecharModal(id) {
+            document.getElementById(id).classList.remove("active");
+            if (id === "modal-admin") sessaoAdmin = null;   // quem for mexer de novo entra com o próprio usuário e PIN
+        }
+        function escapeHtml(s) {
+            return String(s).replace(/[&<>"']/g, function (c) {
+                return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+            });
+        }
+        function normaliza(rom) { return String(rom || "").replace(/^0+/, ""); }
+        function mostrarAviso(texto) {
+            var el = document.getElementById("protheus-alert");
+            if (texto) { el.textContent = texto; el.hidden = false; } else { el.hidden = true; }
+        }
+
+        // ---- relógio ----
+        function updateClock() {
+            var now = new Date();
+            var p2 = function (n) { return String(n).padStart(2, "0"); };
+            document.getElementById("clock-time").textContent = p2(now.getHours()) + ":" + p2(now.getMinutes()) + ":" + p2(now.getSeconds());
+            document.getElementById("clock-date").textContent = p2(now.getDate()) + "/" + p2(now.getMonth() + 1) + "/" + now.getFullYear();
+        }
+        updateClock();
+        setInterval(updateClock, 1000);
+
+        // ---- dados do painel (leitura direta do banco; a senha vai no cabeçalho e é conferida lá) ----
+        function consultarPainel(select) {
+            return fetch(PAINEL_URL + "?id=eq.1&select=" + select, {
+                headers: { apikey: SUPABASE_ANON, "x-senha-painel": senhaPainel, Accept: "application/json" }, cache: "no-store"
+            }).then(function (r) {
+                if (!r.ok) throw new Error("http " + r.status);
+                return r.json();
+            }).then(function (linhas) { return linhas.length ? linhas[0] : null; });   // vazio = senha errada ou painel sem dados
+        }
+        function renderizarCards(dados) {
+            COLUNAS.forEach(function (chave) {
+                var headerEl = document.querySelector(DOM_COLUNA[chave]);
+                var lista = headerEl.nextElementSibling;
+                lista.innerHTML = "";
+                ((dados.colunas || {})[chave] || []).forEach(function (carga) {
+                    var card = document.createElement("div");
+                    card.className = "card " + CLASSE_COR[chave] + (carga.alerta ? " c-alerta" : "");
+                    var html = '<div class="card-title">Carga: ' + carga.romaneio + "</div>";   // já vem escapado do servidor
+                    (carga.informacoes || []).forEach(function (info) { html += '<div class="card-info">' + info + "</div>"; });
+                    card.innerHTML = html;
+                    lista.appendChild(card);
+                });
+            });
+            var grade = document.getElementById("finalizados-grid");
+            grade.innerHTML = "";
+            (dados.finalizado || []).forEach(function (carga) {
+                var card = document.createElement("div");
+                card.className = "card-finalizado";
+                card.innerHTML = '<div class="card-title">Carga: ' + carga.romaneio + "</div>";
+                grade.appendChild(card);
+            });
+            // A pesquisa usa o histórico completo de finalizados (a grade mostra só os 12 mais recentes).
+            var cols = {};
+            COLUNAS.forEach(function (c) { cols[c] = (dados.colunas || {})[c] || []; });
+            cols.finalizado = dados.historico || [];
+            ultimosDados = { colunas: cols };
+        }
+        // Consulta só (hash, coletado_em); baixa o quadro inteiro apenas quando o hash muda. Devolve true se a senha valeu.
+        function buscarPainel(forcar) {
+            return consultarPainel("hash,coletado_em").then(function (meta) {
+                if (!meta) return false;
+                var coletado = new Date(meta.coletado_em);
+                if (!meta.coletado_em || Date.now() - coletado.getTime() > LIMITE_ATRASO_MS) {
+                    var hora = meta.coletado_em ? coletado.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" }) : "—";
+                    mostrarAviso("Dados do Protheus sem atualização desde " + hora + ". As informações exibidas podem estar desatualizadas.");
+                } else {
+                    mostrarAviso("");
+                }
+                if (meta.hash === ultimoHash && !forcar) return true;
+                return consultarPainel("payload").then(function (q) {
+                    if (!q) return false;
+                    ultimoHash = meta.hash;
+                    renderizarCards(q.payload);
+                    return true;
+                });
+            });
+        }
+        function ciclo() {
+            buscarPainel(false).then(function (ok) {
+                if (ok === false && painelIniciado) {   // a senha foi trocada no banco
+                    try { localStorage.removeItem(CHAVE_SENHA); } catch (e) {}
+                    location.reload();
+                }
+            }).catch(function () {
+                mostrarAviso("Dados do Protheus temporariamente indisponíveis. As informações exibidas podem estar desatualizadas.");
+            });
+        }
+
+        // ---- portão de senha de visualização ----
+        function iniciarPainel() {
+            document.getElementById("modal-gate").classList.remove("active");
+            painelIniciado = true;
+            setInterval(ciclo, INTERVALO_PAINEL_MS);
+            buscarEntregas();
+            setInterval(buscarEntregas, INTERVALO_ENTREGAS_MS);
+        }
+        function tentarEntrar() {
+            var input = document.getElementById("gate-input");
+            var erro = document.getElementById("gate-erro");
+            var senha = input.value;
+            if (!senha) return;
+            senhaPainel = senha;
+            erro.textContent = "Verificando...";
+            buscarPainel(true).then(function (ok) {
+                if (ok) {
+                    try { localStorage.setItem(CHAVE_SENHA, senha); } catch (e) {}
+                    iniciarPainel();
+                } else {
+                    senhaPainel = "";
+                    erro.textContent = "Senha incorreta ou painel ainda sem dados.";
+                    input.value = "";
+                    input.focus();
+                }
+            }).catch(function () {
+                senhaPainel = "";
+                erro.textContent = "Não foi possível conectar. Tente de novo.";
+            });
+        }
+        document.getElementById("btn-gate").addEventListener("click", tentarEntrar);
+        document.getElementById("gate-input").addEventListener("keypress", function (e) { if (e.key === "Enter") tentarEntrar(); });
+
+        // ---- tela de administrador (usuário + PIN individual, conferidos no servidor) ----
+        function chamarAdmin(corpo) {
+            return fetch(ADMIN_URL, {
+                method: "POST", headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON },
+                body: JSON.stringify(Object.assign({ usuario: sessaoAdmin.usuario, pin: sessaoAdmin.pin }, corpo))
+            }).then(function (r) {
+                return r.json().catch(function () { return {}; }).then(function (dados) { return { status: r.status, dados: dados }; });
+            });
+        }
+        function abrirAdmin(resposta) {
+            sessaoAdmin.perfil = resposta.perfil;
+            sessaoAdmin.nome = resposta.nome;
+            adminCds = resposta.admin_cds || [];
+            document.getElementById("admin-corrigir").hidden = resposta.perfil !== "admin";
+            document.getElementById("corrigir-msg").textContent = "";
+            document.getElementById("admin-quem").textContent = "Acesso de " + resposta.nome + (resposta.perfil === "admin" ? " (administrador)" : "");
+            fecharModal("modal-pin");
+            abrirModal("modal-admin");
+            renderizarAdmin();
+        }
+        document.getElementById("btn-open-pin").addEventListener("click", function () {
+            document.getElementById("pin-erro").textContent = "";
+            document.getElementById("usuario-input").value = "";
+            document.getElementById("pin-input").value = "";
+            abrirModal("modal-pin");
+            document.getElementById("usuario-input").focus();
+        });
+        function entrarAdmin() {
+            var btn = document.getElementById("btn-submit-pin");
+            var erro = document.getElementById("pin-erro");
+            var usuario = document.getElementById("usuario-input").value.trim();
+            var pin = document.getElementById("pin-input").value;
+            if (!usuario || !pin) { erro.textContent = "Informe o usuário e o PIN."; return; }
+            sessaoAdmin = { usuario: usuario, pin: pin };
+            btn.disabled = true;
+            erro.textContent = "";
+            chamarAdmin({ op: "listar" }).then(function (r) {
+                if (r.status === 200) {
+                    document.getElementById("pin-input").value = "";
+                    abrirAdmin(r.dados);
+                } else {
+                    sessaoAdmin = null;
+                    erro.textContent = r.dados.detail || "Não foi possível entrar.";
+                    document.getElementById("pin-input").value = "";
+                }
+            }).catch(function () {
+                sessaoAdmin = null;
+                erro.textContent = "Erro ao validar o acesso no servidor.";
+            }).then(function () { btn.disabled = false; });
+        }
+        document.getElementById("btn-submit-pin").addEventListener("click", entrarAdmin);
+        ["usuario-input", "pin-input"].forEach(function (id) {
+            document.getElementById(id).addEventListener("keypress", function (e) { if (e.key === "Enter") entrarAdmin(); });
+        });
+
+        function alterarStatus(romaneio, acao, destino) {
+            if (!sessaoAdmin) return;
+            if (acao === "REMOVER" && !confirm("Remover a carga " + romaneio + " do painel?\nUse apenas para cargas canceladas ou lançadas por engano.")) return;
+            if (acao === "DESFAZER" && !confirm("Voltar a carga " + romaneio + " para " + destino + "?")) return;
+            chamarAdmin({ op: "acao", romaneio: romaneio, acao: acao }).then(function (r) {
+                if (r.status === 200) {
+                    if (r.dados.admin_cds) adminCds = r.dados.admin_cds;
+                    renderizarAdmin();
+                    return buscarPainel(true);
+                }
+                if (r.status === 401 || r.status === 423) {
+                    alert(r.dados.detail || "Sessão expirada. Entre de novo.");
+                    fecharModal("modal-admin");
+                    return;
+                }
+                // Ex.: etapa fora de sequência, carga ainda sem nota ou sem permissão para remover: mantém a sessão e só avisa.
+                alert(r.dados.detail || "Não foi possível alterar o status desta carga.");
+                return chamarAdmin({ op: "listar" }).then(function (l) {
+                    if (l.status === 200) { adminCds = l.dados.admin_cds || []; renderizarAdmin(); }
+                });
+            }).catch(function (e) { console.error("Falha ao salvar status", e); alert("Erro de comunicação com o servidor."); });
+        }
+
+        function corrigirStatus() {
+            if (!sessaoAdmin || sessaoAdmin.perfil !== "admin") return;
+            var carga = document.getElementById("corrigir-carga").value.trim();
+            var sel = document.getElementById("corrigir-etapa");
+            var msg = document.getElementById("corrigir-msg");
+            if (!/^[0-9]+$/.test(carga)) { msg.textContent = "Informe só o número da carga."; return; }
+            var nomeEtapa = sel.options[sel.selectedIndex].text;
+            if (!confirm("Levar a carga " + carga + " para " + nomeEtapa + "?")) return;
+            msg.textContent = "Aplicando...";
+            chamarAdmin({ op: "acao", romaneio: carga, acao: "CORRIGIR", etapa: sel.value }).then(function (r) {
+                if (r.status === 200) {
+                    if (r.dados.admin_cds) adminCds = r.dados.admin_cds;
+                    msg.textContent = "Carga " + carga + ": " + r.dados.etapa_anterior + " → " + r.dados.etapa_nova + ".";
+                    document.getElementById("corrigir-carga").value = "";
+                    renderizarAdmin();
+                    return buscarPainel(true);
+                }
+                if (r.status === 401 || r.status === 423) { fecharModal("modal-admin"); return; }
+                msg.textContent = r.dados.detail || "Não foi possível corrigir.";
+            }).catch(function () { msg.textContent = "Erro de comunicação com o servidor."; });
+        }
+        document.getElementById("btn-corrigir").addEventListener("click", corrigirStatus);
+        document.getElementById("corrigir-carga").addEventListener("keypress", function (e) { if (e.key === "Enter") corrigirStatus(); });
+
+        function renderizarAdmin() {
+            var lista = document.getElementById("admin-list-content");
+            lista.innerHTML = "";
+            var mostrarFinalizados = document.getElementById("toggle-finalizados").checked;
+            // A busca ignora zeros à esquerda: digitar 1400 encontra 001400. Ao buscar, as entregues também aparecem.
+            var termo = document.getElementById("admin-search-input").value.trim().toLowerCase().replace(/^0+/, "");
+            var buscando = termo !== "";
+            var exibidos = 0;
+            var podeRemover = sessaoAdmin && sessaoAdmin.perfil === "admin";
+            adminCds.forEach(function (cd) {
+                if (!buscando && cd.is_finalizado && !mostrarFinalizados) return;
+                if (buscando) {
+                    var numero = String(cd.romaneio).replace(/^0+/, "").toLowerCase();
+                    var nome = String(cd.nome_cd).toLowerCase();
+                    if (numero.indexOf(termo) < 0 && nome.indexOf(termo) < 0) return;
+                }
+                var item = document.createElement("div");
+                item.className = "admin-item" + (cd.is_finalizado ? " finalizado" : "") + (cd.alerta ? " alerta" : "");
+                // Só a próxima etapa e o Desfazer (volta uma etapa). O Remover aparece só para o administrador.
+                var btns = "";
+                var proxima = { CARREGANDO: ["btn-carregando", "CARREGANDO"], CARREGADO: ["btn-carregado", "CARREGADO"],
+                                EM_TRANSITO: ["btn-transito", "EM TRÂNSITO"], ENTREGUE: ["btn-carregado", "ENTREGUE"] }[cd.proxima_acao];
+                if (proxima) btns += '<button class="btn ' + proxima[0] + '" onclick="alterarStatus(\'' + cd.romaneio + '\', \'' + cd.proxima_acao + '\')">' + proxima[1] + "</button>";
+                if (cd.desfazer_para) btns += '<button class="btn btn-desfazer" onclick="alterarStatus(\'' + cd.romaneio + '\', \'DESFAZER\', \'' + cd.desfazer_para + '\')">DESFAZER</button>';
+                if (podeRemover && !cd.is_finalizado) btns += '<button class="btn btn-remover" onclick="alterarStatus(\'' + cd.romaneio + '\', \'REMOVER\')">REMOVER</button>';
+                var aviso = cd.sem_retorno_desde ? '<div class="admin-item-aviso">Sem retorno do Protheus desde ' + cd.sem_retorno_desde + "</div>" : "";
+                item.innerHTML =
+                    '<div class="admin-item-info">' +
+                    '<div class="admin-item-title">Carga: ' + cd.romaneio + "</div>" +
+                    '<div class="admin-item-cd">' + (cd.nome_cd ? cd.nome_cd + " | " : "") + '<span style="color:var(--text-secondary)">' + cd.status + "</span></div>" +
+                    aviso + "</div>" +
+                    '<div class="admin-actions">' + btns + "</div>";
+                lista.appendChild(item);
+                exibidos++;
+            });
+            if (exibidos === 0) {
+                var vazio = document.createElement("div");
+                vazio.className = "admin-vazio";
+                vazio.textContent = buscando ? "Nenhuma carga encontrada." : "Nenhuma carga para exibir.";
+                lista.appendChild(vazio);
+            }
+        }
+
+// ---- entregas por pedido, carga e CRM (planilha do Transporte, guardada no Supabase pelo script do PC) ----
+var DIA_MS = 24 * 60 * 60 * 1000;
+var LIMITE_CARGAS_PEDIDO = 5;   // máximo de cargas exibidas para um mesmo pedido
+var NOME_COLUNA = {
+    a_separar: "A Separar", separando: "Separando", separado: "Separado", faturar: "Faturar",
+    a_carregar: "A Carregar", carregando: "Carregando", carregado: "Carregado", em_transito: "Em trânsito",
+    finalizado: "Entregue"
+};
+var modoBusca = "pedido";       // "pedido", "carga" ou "crm"
+var hashEntregas = "";
+// Navegação dentro do modal (clique em card, em carga ou em pedido): vista atual + pilha para o botão Voltar.
+var vistaAtual = null;          // { tipo: "pedido" | "carga" | "crm", valor: texto }
+var pilhaBusca = [];
+var botaoVoltar = null;
+
+// Número sem zeros à esquerda e sem qualquer caractere não numérico (pedido ou carga digitados).
+function normalizaNumero(p) {
+    return String(p || "").replace(/\D/g, "").replace(/^0+/, "");
+}
+function pedidoCom6(p) {
+    return String(p).padStart(6, "0");
+}
+// Romaneio pode vir como texto (ex.: "ENV. JUNTO 1435"); vale o último número do texto.
+function cargaNumero(rom) {
+    var achados = String(rom || "").match(/\d+/g);
+    return achados ? achados[achados.length - 1].replace(/^0+/, "") : "";
+}
+// CRM digitado ou da planilha: maiúsculo, sem espaços e sem o "SO" do CRM antigo (SO9950-08 = 9950-08).
+function normalizaCrm(t) {
+    return String(t || "").toUpperCase().replace(/[^A-Z0-9-]/g, "").replace(/^SO/, "").replace(/^0+(?=[0-9])/, "");
+}
+// Cabeçalho sem acento e em maiúsculo (FORMULÁRIO -> FORMULARIO): as colunas são achadas pelo nome.
+function normalizaCabecalho(s) {
+    return String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/^﻿/, "").toUpperCase().replace(/\s+/g, " ").trim();
+}
+// "dd/mm/aaaa" -> { txt, t } (t em UTC à meia-noite, para comparar e contar dias) ou null.
+function parseData(txt) {
+    var m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[ T]+(\d{1,2}):(\d{2})(?::\d{2})?)?$/.exec(String(txt || "").trim());
+    if (!m) return null;
+    var dia = ("0" + m[1]).slice(-2) + "/" + ("0" + m[2]).slice(-2) + "/" + m[3];
+    // t = só a data (as comparações de prazo são por dia); o horário, quando a planilha traz, aparece no texto
+    return { txt: dia + (m[4] ? " " + ("0" + m[4]).slice(-2) + ":" + m[5] : ""), t: Date.UTC(+m[3], +m[2] - 1, +m[1]) };
+}
+function hojeUTC() {
+    var d = new Date();
+    return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+}
+// Uma linha da planilha por ocorrência: o mesmo pedido pode ter mais de uma carga (entrega parcial).
+// As colunas são achadas pelo nome do cabeçalho; FORMULÁRIO (CRM) e DATA DE EXPEDIÇÃO são opcionais.
+function processarEntregas(dados) {
+    var porPedido = {};
+    var porCarga = {};
+    var porCrm = [];
+    var linhas = String(dados.csv || "").split(/\r?\n/);
+    var idx = {};
+    String(linhas[0] || "").split(";").forEach(function (nome, n) { idx[normalizaCabecalho(nome)] = n; });
+    if (idx["ROMANEIO"] === undefined || idx["PEDIDO"] === undefined) {
+        return { porPedido: porPedido, porCarga: porCarga, porCrm: porCrm, atualizadoEm: null };
+    }
+    var col = function (c, nome) { return idx[nome] === undefined ? "" : String(c[idx[nome]] || "").trim(); };
+    for (var i = 1; i < linhas.length; i++) {
+        if (!linhas[i].trim()) continue;
+        var c = linhas[i].split(";");
+        if (c.length < 4) continue;
+        var chave = normalizaNumero(col(c, "PEDIDO"));
+        if (!chave) continue;
+        var crm = col(c, "FORMULARIO");
+        var reg = {
+            pedido: chave, carga: cargaNumero(col(c, "ROMANEIO")),
+            previsao: parseData(col(c, "PREVISAO DE ENTREGA")), entregue: parseData(col(c, "ENTREGA REALIZADA")),
+            crm: crm, crmChave: normalizaCrm(crm), expedicao: parseData(col(c, "DATA DE EXPEDICAO"))
+        };
+        (porPedido[chave] = porPedido[chave] || []).push(reg);
+        if (reg.carga) (porCarga[reg.carga] = porCarga[reg.carga] || []).push(reg);
+        if (reg.crmChave) porCrm.push(reg);
+    }
+    Object.keys(porPedido).forEach(function (k) {
+        // carga mais recente primeiro
+        porPedido[k].sort(function (a, b) { return (Number(b.carga) || 0) - (Number(a.carga) || 0); });
+    });
+    var quando = dados.arquivo_modificado_em ? new Date(dados.arquivo_modificado_em) : null;
+    if (quando && isNaN(quando.getTime())) quando = null;
+    return { porPedido: porPedido, porCarga: porCarga, porCrm: porCrm, atualizadoEm: quando };
+}
+// Leitura direta da tabela entregas (a senha de visualização vai no cabeçalho e é conferida no banco).
+function consultarEntregas(select) {
+    return fetch(ENTREGAS_REST + "?id=eq.1&select=" + select, {
+        headers: { apikey: SUPABASE_ANON, "x-senha-painel": senhaPainel, Accept: "application/json" }, cache: "no-store"
+    }).then(function (r) {
+        if (!r.ok) throw new Error("http " + r.status);
+        return r.json();
+    }).then(function (linhas) { return linhas.length ? linhas[0] : null; });
+}
+// Consulta só o hash; baixa o CSV inteiro apenas quando ele muda.
+function buscarEntregas() {
+    consultarEntregas("hash,arquivo_modificado_em")
+        .then(function (meta) {
+            if (!meta) { if (!entregas) entregasErro = true; return null; }   // planilha ainda não enviada
+            if (meta.hash === hashEntregas && entregas) { entregasErro = false; return null; }
+            return consultarEntregas("csv,arquivo_modificado_em").then(function (dados) {
+                if (!dados) return;
+                entregas = processarEntregas(dados);
+                hashEntregas = meta.hash;
+                entregasErro = false;
+            });
+        })
+        .catch(function () {
+            entregasErro = true;
+        });
+}
+// Localiza a carga no quadro: { coluna, item } (coluna inclui "finalizado") ou null se não estiver nele.
+function localizarCarga(carga) {
+    if (!carga || !ultimosDados) return null;
+    var colunas = ultimosDados.colunas || {};
+    var chaves = COLUNAS.concat(["finalizado"]);
+    for (var i = 0; i < chaves.length; i++) {
+        var itens = colunas[chaves[i]] || [];
+        for (var j = 0; j < itens.length; j++) {
+            if (cargaNumero(itens[j].romaneio) === carga) return { coluna: chaves[i], item: itens[j] };
+        }
+    }
+    return null;
+}
+// Status exibido da carga: coluna do quadro; fora do quadro, "Entregue" se todos os pedidos da planilha têm data de entrega.
+function statusDaCarga(carga, achado) {
+    if (achado) return NOME_COLUNA[achado.coluna] || achado.coluna;
+    var linhas = entregas.porCarga[carga] || [];
+    if (linhas.length > 0 && linhas.every(function (l) { return l.entregue; })) return "Entregue";
+    return "Fora do quadro";
+}
+// Situação de um pedido em uma carga: { texto, cor, detalhes }.
+function situacaoPedido(reg, coluna) {
+    if (reg.entregue) {
+        var det = [["Data entregue", reg.entregue], ["Previsão de entrega", reg.previsao]];
+        if (!reg.previsao) return { texto: "Entregue", cor: "var(--c-green-light)", detalhes: det };
+        var dias = Math.round((reg.entregue.t - reg.previsao.t) / DIA_MS);
+        if (dias <= 0) return { texto: "Entregue dentro do prazo", cor: "var(--c-green-light)", detalhes: det };
+        return { texto: "Entregue com atraso (" + dias + (dias === 1 ? " dia)" : " dias)"), cor: "var(--c-orange)", detalhes: det };
+    }
+    var prev = [["Previsão de entrega", reg.previsao]];
+    if (coluna === "finalizado") return { texto: "Carga finalizada · data de entrega ainda não registrada", cor: "var(--c-blue-light)", detalhes: prev };
+    // Data de expedição preenchida = o pedido já saiu (mesmo que o quadro ainda não tenha movido a carga).
+    if (coluna === "em_transito" || reg.expedicao) return { texto: "Em trânsito", cor: "var(--c-orange)", detalhes: prev };
+    // Carga fora do quadro (saiu dos 60 dias ou nunca entrou) com previsão vencida e sem entrega registrada.
+    if (!coluna && reg.previsao && reg.previsao.t < hojeUTC()) return { texto: "Data de entrega não registrada", cor: "var(--c-blue-light)", detalhes: prev };
+    return { texto: "Pedido ainda não saiu para entrega", cor: "var(--c-yellow)", detalhes: prev };
+}
+function formatarAtualizacao(data) {
+    var partes = new Intl.DateTimeFormat("pt-BR", {
+        timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false
+    }).formatToParts(data);
+    var v = {};
+    partes.forEach(function (p) { v[p.type] = p.value; });
+    return v.day + "/" + v.month + " às " + v.hour + ":" + v.minute;
+}
+function rodapeEntregas() {
+    if (!entregas || !entregas.atualizadoEm) return "";
+    return '<div class="res-rodape">Dados de entrega atualizados em ' + escapeHtml(formatarAtualizacao(entregas.atualizadoEm)) + "</div>";
+}
+function linhaDados(rotulo, data) {
+    return data ? '<div class="res-linha">' + rotulo + ": " + escapeHtml(data.txt) + "</div>" : "";
+}
+function statusHtml(texto, cor) {
+    return '<div class="res-status" style="color: ' + cor + '">' + escapeHtml(texto) + "</div>";
+}
+// Números clicáveis dentro do modal: a carga abre a pesquisa da carga, o pedido abre a pesquisa do pedido.
+function linkCarga(carga) {
+    return '<span class="res-link" role="button" data-carga="' + escapeHtml(carga) + '">' + escapeHtml(carga) + "</span>";
+}
+function linkPedido(pedido) {
+    return '<span class="res-link" role="button" data-pedido="' + escapeHtml(pedido) + '">' + escapeHtml(pedidoCom6(pedido)) + "</span>";
+}
+
+// Bloco de uma ocorrência do pedido: carga, status da carga e situação do pedido nela.
+function blocoOcorrencia(reg, mostrarPedido) {
+    var achado = localizarCarga(reg.carga);
+    var sit = situacaoPedido(reg, achado ? achado.coluna : null);
+    var html = '<div class="res-bloco">';
+    if (mostrarPedido) html += '<div class="res-pedido">Pedido: ' + linkPedido(reg.pedido) + "</div>";
+    if (reg.crm) html += '<div class="res-linha">CRM: ' + escapeHtml(reg.crm) + "</div>";
+    if (reg.carga) {
+        html += '<div class="res-carga">Carga: ' + linkCarga(reg.carga) + " · Status: " + escapeHtml(statusDaCarga(reg.carga, achado)) + "</div>";
+    }
+    html += statusHtml(sit.texto, sit.cor);
+    sit.detalhes.forEach(function (d) { html += linhaDados(d[0], d[1]); });
+    html += linhaDados("Data de expedição", reg.expedicao);
+    return html + "</div>";
+}
+// Linha da lista de pedidos na pesquisa por carga (a linha toda abre a pesquisa do pedido).
+function itemLista(reg, coluna) {
+    var sit = situacaoPedido(reg, coluna);
+    var det = sit.detalhes.concat([["Data de expedição", reg.expedicao]]).filter(function (d) { return d[1]; }).map(function (d) { return d[0] + ": " + d[1].txt; }).join(" · ");
+    return '<div class="res-item res-clicavel" role="button" data-pedido="' + escapeHtml(reg.pedido) + '"><div class="res-item-topo"><span class="res-item-ped">' + escapeHtml(pedidoCom6(reg.pedido)) + "</span>" +
+        '<span class="res-item-st" style="color: ' + sit.cor + '">' + escapeHtml(sit.texto) + "</span></div>" +
+        (det ? '<div class="res-item-det">' + escapeHtml(det) + "</div>" : "") + "</div>";
+}
+// Botão ← Voltar do modal de pesquisa: criado uma vez, antes do título; só aparece quando há para onde voltar.
+function atualizarBotaoVoltar() {
+    var titulo = document.getElementById("modal-search-titulo");
+    if (!botaoVoltar) {
+        botaoVoltar = document.createElement("button");
+        botaoVoltar.type = "button";
+        botaoVoltar.className = "res-voltar";
+        botaoVoltar.textContent = "← Voltar";
+        titulo.parentNode.insertBefore(botaoVoltar, titulo);
+    }
+    botaoVoltar.hidden = pilhaBusca.length === 0;
+}
+function abrirResultado(titulo) {
+    document.getElementById("modal-search-titulo").textContent = titulo;
+    var container = document.getElementById("search-result-content");
+    container.innerHTML = "Buscando...";
+    atualizarBotaoVoltar();
+    abrirModal("modal-search");
+    return container;
+}
+// Só responde quando o quadro e a planilha de entregas já foram lidos.
+function dadosProntos(container) {
+    if (entregas && ultimosDados) return true;
+    container.innerHTML = entregasErro && !entregas
+        ? 'Dados de entrega indisponíveis no momento.<div class="res-orienta">Tente novamente em instantes.</div>'
+        : 'Carregando os dados…<div class="res-orienta">Tente novamente em instantes.</div>';
+    return false;
+}
+
+// Abre uma pesquisa no modal. origem: "novo" (digitada ou clique no card: zera o histórico),
+// "link" (clique em carga/pedido dentro do modal: guarda a tela atual para o Voltar) ou "voltar".
+function abrirVista(tipo, valor, origem) {
+    if (origem === "link" && vistaAtual) pilhaBusca.push(vistaAtual);
+    else if (origem === "novo") pilhaBusca = [];
+    vistaAtual = { tipo: tipo, valor: valor };
+    if (tipo === "carga") buscarCarga(valor);
+    else if (tipo === "crm") buscarCrm(valor);
+    else buscarPedido(valor);
+}
+
+// Busca em modal, igual ao original: aperta Enter e mostra o resultado (não filtra a tela).
+// Por pedido: a situação vem da planilha do Transporte cruzada com a posição da carga no quadro.
+function buscarPedido(valor) {
+    var container = abrirResultado("Pesquisa de Pedido");
+    var chave = normalizaNumero(valor);
+    if (!dadosProntos(container)) return;
+
+    var regs = chave ? entregas.porPedido[chave] : null;
+    if (!regs) {
+        container.innerHTML =
+            'Pedido não encontrado.<div class="res-orienta">Por favor, verifique com o time de Transportes.</div>' + rodapeEntregas();
+        return;
+    }
+    var html = '<div class="res-pedido">Pedido: ' + escapeHtml(pedidoCom6(chave)) + "</div>";
+    regs.slice(0, LIMITE_CARGAS_PEDIDO).forEach(function (reg) { html += blocoOcorrencia(reg); });
+    if (regs.length > LIMITE_CARGAS_PEDIDO) {
+        var resto = regs.length - LIMITE_CARGAS_PEDIDO;
+        html += '<div class="res-orienta">e mais ' + resto + (resto === 1 ? " carga" : " cargas") + "</div>";
+    }
+    container.innerHTML = html + rodapeEntregas();
+}
+// Por CRM: digitar parte do número traz todos os que começam assim; digitar completo (com o sufixo) traz o exato.
+// Cada CRM leva ao pedido do Protheus correspondente (os números são diferentes) e à carga dele.
+var LIMITE_CRM = 10;
+function buscarCrm(valor) {
+    var container = abrirResultado("Pesquisa de CRM");
+    var digitado = String(valor || "").trim();
+    var termo = normalizaCrm(digitado);
+    if (!dadosProntos(container)) return;
+    if (termo.length < 3) {
+        container.innerHTML = 'Digite pelo menos 3 caracteres do CRM.' + rodapeEntregas();
+        return;
+    }
+    var achados = entregas.porCrm.filter(function (r) { return r.crmChave.indexOf(termo) === 0; });
+    if (achados.length === 0) {
+        container.innerHTML = 'CRM não encontrado.<div class="res-orienta">Verifique o número do pedido do Protheus ou confirme o número correto com o time de Adm. de Vendas.</div>' + rodapeEntregas();
+        return;
+    }
+    achados.sort(function (a, b) {
+        var ea = a.crmChave === termo ? 0 : 1, eb = b.crmChave === termo ? 0 : 1;
+        return ea - eb || (a.crmChave < b.crmChave ? -1 : a.crmChave > b.crmChave ? 1 : 0);
+    });
+    var html = '<div class="res-pedido">CRM: ' + escapeHtml(digitado) + "</div>";
+    if (achados.length > 1) html += '<div class="res-resumo">' + achados.length + " CRMs encontrados</div>";
+    achados.slice(0, LIMITE_CRM).forEach(function (reg) { html += blocoOcorrencia(reg, true); });
+    if (achados.length > LIMITE_CRM) {
+        html += '<div class="res-orienta">e mais ' + (achados.length - LIMITE_CRM) + ". Digite mais números do CRM para refinar.</div>";
+    }
+    container.innerHTML = html + rodapeEntregas();
+}
+// Por carga: status da carga no quadro e a lista dos pedidos dela com a situação de cada um.
+function buscarCarga(valor) {
+    var container = abrirResultado("Pesquisa de Carga");
+    var carga = normalizaNumero(valor);
+    if (!dadosProntos(container)) return;
+
+    var achado = localizarCarga(carga);
+    var regs = carga ? (entregas.porCarga[carga] || []) : [];
+    if (!achado && regs.length === 0) {
+        container.innerHTML =
+            'Carga não encontrada.<div class="res-orienta">Por favor, verifique com o time de Transportes.</div>' + rodapeEntregas();
+        return;
+    }
+    var html = '<div class="res-pedido">Carga: ' + escapeHtml(carga) + "</div>" +
+        '<div class="res-carga">Status: ' + escapeHtml(statusDaCarga(carga, achado)) + "</div>";
+    if (achado && achado.item.nome_cd) html += '<div class="res-cd">' + escapeHtml(achado.item.nome_cd) + "</div>";
+    if (regs.length === 0) {
+        html += '<div class="res-orienta">Pedidos ainda não constam na planilha do Transporte.</div>';
+    } else {
+        var entregues = regs.filter(function (r) { return r.entregue; }).length;
+        html += '<div class="res-resumo">' + regs.length + (regs.length === 1 ? " pedido" : " pedidos") + " · " +
+            entregues + (entregues === 1 ? " entregue" : " entregues") + "</div>";
+        var coluna = achado ? achado.coluna : null;
+        html += '<div class="res-lista">' + regs.map(function (r) { return itemLista(r, coluna); }).join("") + "</div>";
+    }
+    container.innerHTML = html + rodapeEntregas();
+}
+
+// Chave Pedido | Carga | CRM na caixa de busca.
+function definirModo(modo) {
+    modoBusca = modo;
+    var botoes = document.querySelectorAll(".modo-btn");
+    for (var i = 0; i < botoes.length; i++) botoes[i].classList.toggle("ativo", botoes[i].dataset.modo === modo);
+    var input = document.getElementById("search-input");
+    input.placeholder = modo === "carga" ? "Buscar carga (nº)…" : modo === "crm" ? "Buscar CRM…" : "Buscar pedido (nº)…";
+    input.inputMode = modo === "crm" ? "text" : "numeric";
+    input.focus();
+}
+(function () {
+    var botoes = document.querySelectorAll(".modo-btn");
+    for (var i = 0; i < botoes.length; i++) {
+        botoes[i].addEventListener("click", function () { definirModo(this.dataset.modo); });
+    }
+})();
+document.getElementById("search-input").addEventListener("keypress", function (e) {
+    if (e.key === "Enter") {
+        abrirVista(modoBusca, this.value, "novo");
+        this.value = "";
+        this.blur();
+    }
+});
+
+// Clique no card do quadro (colunas e grade de entregues) abre a pesquisa da carga. Delegado no contêiner
+// principal porque os cards são recriados a cada atualização do painel.
+document.querySelector(".main-container").addEventListener("click", function (e) {
+    var card = e.target.closest(".card, .card-finalizado");
+    if (!card) return;
+    var titulo = card.querySelector(".card-title");
+    var carga = titulo ? cargaNumero(titulo.textContent) : "";
+    if (carga) abrirVista("carga", carga, "novo");
+});
+// Clique em carga ou pedido dentro do modal, e botão Voltar.
+document.getElementById("search-result-content").addEventListener("click", function (e) {
+    var alvo = e.target.closest("[data-carga], [data-pedido]");
+    if (!alvo) return;
+    if (alvo.dataset.carga) abrirVista("carga", alvo.dataset.carga, "link");
+    else abrirVista("pedido", alvo.dataset.pedido, "link");
+});
+document.getElementById("modal-search").addEventListener("click", function (e) {
+    if (!e.target.classList.contains("res-voltar")) return;
+    var anterior = pilhaBusca.pop();
+    if (anterior) abrirVista(anterior.tipo, anterior.valor, "voltar");
+});
+
+        // ---- início: senha guardada neste navegador (a TV digita uma vez) ----
+        (function () {
+            var guardada = "";
+            try { guardada = localStorage.getItem(CHAVE_SENHA) || ""; } catch (e) {}
+            if (!guardada) { document.getElementById("gate-input").focus(); return; }
+            senhaPainel = guardada;
+            buscarPainel(true).then(function (ok) {
+                if (ok) { iniciarPainel(); return; }
+                try { localStorage.removeItem(CHAVE_SENHA); } catch (e) {}
+                senhaPainel = "";
+                document.getElementById("gate-erro").textContent = "Senha incorreta ou alterada. Digite de novo.";
+            }).catch(function () {
+                // sem rede agora: tenta de novo em instantes com a senha guardada
+                mostrarAviso("Dados do Protheus temporariamente indisponíveis. As informações exibidas podem estar desatualizadas.");
+                iniciarPainel();
+            });
+        })();
+    </script>
+</body>
+</html>
