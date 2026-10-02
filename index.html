@@ -139,6 +139,10 @@
         .search-container { flex-direction: row; }
         .search-container:hover .modo-busca, .search-container:focus-within .modo-busca { max-width: 20vw; }
         .pin-erro { color: var(--genica-red); font-size: 1.5vh; min-height: 2vh; text-align: center; }
+        .manter-conectado { display: flex; align-items: center; gap: 0.5vw; font-size: 1.4vh; color: var(--text-secondary); cursor: pointer; align-self: flex-start; margin-left: 25%; }
+        .manter-conectado input { width: 1.6vh; height: 1.6vh; cursor: pointer; }
+        .admin-sair { background: none; border: none; color: var(--text-secondary); text-decoration: underline; cursor: pointer; font-size: 1.3vh; margin-left: 0.6vw; padding: 0; }
+        .admin-sair:hover { color: var(--text-primary, #fff); }
         .admin-quem { font-size: 1.4vh; color: var(--text-secondary); text-align: center; margin-bottom: 1.5vh; }
         .admin-corrigir { border: 1px solid var(--border-color, #444); border-radius: 0.8vh; padding: 1.2vh 1.2vw; margin-bottom: 1.5vh; }
         .admin-corrigir-titulo { font-size: 1.6vh; font-weight: bold; margin-bottom: 1vh; color: var(--text-primary, #fff); }
@@ -199,6 +203,7 @@
                 <input type="text" id="usuario-input" class="pin-input" placeholder="usuário" autocomplete="off" autocapitalize="off" spellcheck="false">
                 <label for="pin-input" class="campo-rotulo">PIN</label>
                 <input type="password" id="pin-input" class="pin-input" placeholder="****" autocomplete="off" autocapitalize="off" spellcheck="false">
+                <label class="manter-conectado"><input type="checkbox" id="manter-conectado"> Manter conectado neste computador (30 dias)</label>
                 <button class="btn btn-carregado" id="btn-submit-pin">Acessar</button>
                 <div class="pin-erro" id="pin-erro"></div>
             </div>
@@ -210,6 +215,7 @@
             <span class="modal-close" onclick="fecharModal('modal-admin')">&times;</span>
             <div class="modal-title">Gestão de Status das Cargas</div>
             <div class="admin-quem" id="admin-quem"></div>
+            <div class="admin-quem"><button class="admin-sair" id="btn-sair-admin" type="button">Sair e esquecer meu acesso neste computador</button></div>
 
             <div class="admin-corrigir" id="admin-corrigir" hidden>
                 <div class="admin-corrigir-titulo">Corrigir status (só administrador)</div>
@@ -295,6 +301,8 @@
         var INTERVALO_PAINEL_MS = 10 * 1000;
         var LIMITE_ATRASO_MS = 3 * 60 * 1000;               // sem coleta nova há mais que isso: avisa na tela
         var CHAVE_SENHA = "painel-expedicao-senha";
+        var CHAVE_ADMIN = "painel-expedicao-admin";   // acesso do administrador guardado neste navegador (só se marcar "Manter conectado")
+        var DIAS_CONECTADO = 30;
 
         var COLUNAS = ["a_separar", "separando", "separado", "faturar", "a_carregar", "carregando", "carregado", "em_transito"];
         var CLASSE_COR = {
@@ -463,10 +471,50 @@
             abrirModal("modal-admin");
             renderizarAdmin();
         }
-        document.getElementById("btn-open-pin").addEventListener("click", function () {
+        function lerAdminGuardado() {
+            try {
+                var g = JSON.parse(localStorage.getItem(CHAVE_ADMIN) || "null");
+                if (g && g.usuario && g.pin && g.ate > Date.now()) return g;
+                if (g) localStorage.removeItem(CHAVE_ADMIN);
+            } catch (e) {}
+            return null;
+        }
+        function guardarAdmin(usuario, pin) {
+            try { localStorage.setItem(CHAVE_ADMIN, JSON.stringify({ usuario: usuario, pin: pin, ate: Date.now() + DIAS_CONECTADO * 86400000 })); } catch (e) {}
+        }
+        function esquecerAdmin() { try { localStorage.removeItem(CHAVE_ADMIN); } catch (e) {} }
+        function sairAdmin() { esquecerAdmin(); fecharModal("modal-admin"); }
+        document.getElementById("btn-sair-admin").addEventListener("click", sairAdmin);
+        function abrirTelaLogin() {
             document.getElementById("pin-erro").textContent = "";
             document.getElementById("usuario-input").value = "";
             document.getElementById("pin-input").value = "";
+            document.getElementById("manter-conectado").checked = false;
+            abrirModal("modal-pin");
+            document.getElementById("usuario-input").focus();
+        }
+        document.getElementById("btn-open-pin").addEventListener("click", function () {
+            var g = lerAdminGuardado();
+            if (g) {
+                // Já entrou antes neste computador: confere de novo no servidor e abre direto.
+                sessaoAdmin = { usuario: g.usuario, pin: g.pin };
+                chamarAdmin({ op: "listar" }).then(function (r) {
+                    if (r.status === 200) { abrirAdmin(r.dados); return; }
+                    sessaoAdmin = null;
+                    esquecerAdmin();   // PIN trocado, usuário desativado ou bloqueado: pede o login de novo
+                    abrirTelaLogin();
+                    document.getElementById("pin-erro").textContent = r.dados.detail || "Entre de novo.";
+                }).catch(function () {
+                    sessaoAdmin = null;
+                    abrirTelaLogin();
+                    document.getElementById("pin-erro").textContent = "Não foi possível conectar. Tente de novo.";
+                });
+                return;
+            }
+            document.getElementById("pin-erro").textContent = "";
+            document.getElementById("usuario-input").value = "";
+            document.getElementById("pin-input").value = "";
+            document.getElementById("manter-conectado").checked = false;
             abrirModal("modal-pin");
             document.getElementById("usuario-input").focus();
         });
@@ -481,6 +529,7 @@
             erro.textContent = "";
             chamarAdmin({ op: "listar" }).then(function (r) {
                 if (r.status === 200) {
+                    if (document.getElementById("manter-conectado").checked) guardarAdmin(usuario, pin); else esquecerAdmin();
                     document.getElementById("pin-input").value = "";
                     abrirAdmin(r.dados);
                 } else {
@@ -510,6 +559,7 @@
                 }
                 if (r.status === 401 || r.status === 423) {
                     alert(r.dados.detail || "Sessão expirada. Entre de novo.");
+                    esquecerAdmin();
                     fecharModal("modal-admin");
                     return;
                 }
