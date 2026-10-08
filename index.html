@@ -169,6 +169,17 @@
         #clock-visao:empty { display: none; }
         .clock-sair { margin-top: 0.8vh; }
         #regional-listas { line-height: 1.8; }
+        /* ferramentas do administrador recolhidas em abas (08/10/2026) */
+        .admin-abas { display: flex; gap: 0.8vw; margin-bottom: 1.2vh; }
+        .admin-aba { flex: 1; display: flex; align-items: center; justify-content: center; gap: 0.6vw; padding: 1vh 0.8vw; font-size: 1.6vh; font-weight: bold; border-radius: 0.8vh; cursor: pointer; background: transparent; color: var(--text-secondary); border: 1px solid var(--border-color, #444); transition: border-color 0.2s, color 0.2s, background 0.2s; }
+        .admin-aba:hover { color: var(--text-primary, #fff); border-color: var(--text-secondary); }
+        .admin-aba .seta { font-size: 1.2vh; transition: transform 0.2s; }
+        .admin-aba.aberta { color: var(--text-primary, #fff); border-color: var(--c-green-light, #a3e635); background: rgba(163, 230, 53, 0.08); }
+        .admin-aba.aberta .seta { transform: rotate(180deg); }
+        .admin-aba .contagem { font-size: 1.3vh; padding: 0 0.5vw; border-radius: 1vh; background: var(--genica-orange, #f59e0b); color: #111; }
+        .admin-aba .contagem:empty { display: none; }
+        .admin-painel { display: none; }
+        .admin-painel.aberto { display: block; }
         #regional-listas .res-link { margin-right: 0.8vw; }
     </style>
 </head>
@@ -227,8 +238,12 @@
             <div class="admin-quem" id="admin-quem"></div>
             <div class="admin-quem"><button class="admin-sair" id="btn-sair-admin" type="button">Sair e esquecer meu acesso neste computador</button></div>
 
-            <div class="admin-corrigir" id="admin-corrigir" hidden>
-                <div class="admin-corrigir-titulo">Corrigir status (só administrador)</div>
+            <div class="admin-abas" id="admin-abas" hidden>
+                <button type="button" class="admin-aba" id="aba-corrigir" data-painel="admin-corrigir">Corrigir status <span class="seta">&#9660;</span></button>
+                <button type="button" class="admin-aba" id="aba-regional" data-painel="admin-regional">Regional do pedido <span class="contagem" id="aba-regional-contagem"></span><span class="seta">&#9660;</span></button>
+            </div>
+
+            <div class="admin-corrigir admin-painel" id="admin-corrigir">
                 <div class="admin-corrigir-linha">
                     <input type="text" id="corrigir-carga" class="pin-input" placeholder="Carga (ex.: 1456)" inputmode="numeric" autocomplete="off">
                     <select id="corrigir-etapa" class="corrigir-select">
@@ -248,8 +263,7 @@
                 <div class="pin-erro" id="corrigir-msg"></div>
             </div>
 
-            <div class="admin-corrigir" id="admin-regional" hidden>
-                <div class="admin-corrigir-titulo">Regional do pedido (só administrador)</div>
+            <div class="admin-corrigir admin-painel" id="admin-regional">
                 <div class="admin-corrigir-linha">
                     <input type="text" id="regional-pedido" class="pin-input" placeholder="Pedido (ex.: 12345)" inputmode="numeric" autocomplete="off">
                     <select id="regional-escolha" class="corrigir-select"></select>
@@ -518,12 +532,23 @@
                 return r.json().catch(function () { return {}; }).then(function (dados) { return { status: r.status, dados: dados }; });
             });
         }
+        function alternarPainelAdmin(id) {
+            ["admin-corrigir", "admin-regional"].forEach(function (p) {
+                var abrir = p === id && !document.getElementById(p).classList.contains("aberto");
+                document.getElementById(p).classList.toggle("aberto", abrir);
+                document.getElementById(p === "admin-corrigir" ? "aba-corrigir" : "aba-regional").classList.toggle("aberta", abrir);
+            });
+        }
+        document.getElementById("admin-abas").addEventListener("click", function (e) {
+            var b = e.target.closest(".admin-aba");
+            if (b) alternarPainelAdmin(b.dataset.painel);
+        });
         function abrirAdmin(resposta) {
             sessaoAdmin.perfil = resposta.perfil;
             sessaoAdmin.nome = resposta.nome;
             adminCds = resposta.admin_cds || [];
-            document.getElementById("admin-corrigir").hidden = resposta.perfil !== "admin";
-            document.getElementById("admin-regional").hidden = resposta.perfil !== "admin";
+            document.getElementById("admin-abas").hidden = resposta.perfil !== "admin";
+            alternarPainelAdmin(null);
             document.getElementById("regional-msg").textContent = "";
             if (resposta.perfil === "admin") carregarResumoRegional();
             document.getElementById("corrigir-msg").textContent = "";
@@ -677,6 +702,7 @@
                 });
                 var html = "";
                 var sem = d.sem_regional || [];
+                document.getElementById("aba-regional-contagem").textContent = sem.length ? String(sem.length) : "";
                 html += sem.length
                     ? "Pedidos sem regional agora (" + sem.length + "), clique para escolher: " + sem.slice(0, 30).map(function (p) {
                         return '<span class="res-link" role="button" data-pedido-regional="' + escapeHtml(p.pedido) + '">' + escapeHtml(p.pedido) + " (carga " + escapeHtml(p.carga) + ")</span>";
