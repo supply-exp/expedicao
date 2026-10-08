@@ -162,6 +162,14 @@
         .res-voltar[hidden] { display: none; }
         /* lista de pedidos da carga: datas em duas colunas (esquerda / direita) */
         .res-item-linha { display: flex; justify-content: space-between; gap: 1vw; }
+        /* fase 8 (08/10/2026): acesso por regional */
+        .tag-reg { display: inline-block; margin-left: 0.6vw; padding: 0.1vh 0.6vw; font-size: 1.3vh; font-weight: normal; line-height: 1.6; color: var(--text-secondary); border: 1px solid var(--border-color); border-radius: 1vh; vertical-align: middle; white-space: nowrap; }
+        .tag-reg.aviso { color: var(--genica-orange); border-color: var(--genica-orange); }
+        #clock-visao { font-size: 2vh; color: var(--genica-green-light); margin-top: 0.8vh; }
+        #clock-visao:empty { display: none; }
+        .clock-sair { margin-top: 0.8vh; }
+        #regional-listas { line-height: 1.8; }
+        #regional-listas .res-link { margin-right: 0.8vw; }
     </style>
 </head>
 <body>
@@ -178,8 +186,10 @@
         <div class="modal-content" style="width: 25vw;">
             <div class="modal-title">Painel de Expedição</div>
             <div class="pin-container">
-                <label for="gate-input" style="color: var(--text-secondary);">Digite a senha de visualização:</label>
-                <input type="password" id="gate-input" class="pin-input" placeholder="Senha" autocomplete="off" autocapitalize="off" spellcheck="false">
+                <label for="gate-usuario" class="campo-rotulo">Usuário (Geral ou o nome da sua regional)</label>
+                <input type="text" id="gate-usuario" class="pin-input" placeholder="Usuário" autocomplete="username" autocapitalize="off" spellcheck="false">
+                <label for="gate-input" class="campo-rotulo">Senha</label>
+                <input type="password" id="gate-input" class="pin-input" placeholder="Senha" autocomplete="current-password" autocapitalize="off" spellcheck="false">
                 <button class="btn btn-carregado" id="btn-gate">Entrar</button>
                 <div class="pin-erro" id="gate-erro"></div>
             </div>
@@ -238,6 +248,19 @@
                 <div class="pin-erro" id="corrigir-msg"></div>
             </div>
 
+            <div class="admin-corrigir" id="admin-regional" hidden>
+                <div class="admin-corrigir-titulo">Regional do pedido (só administrador)</div>
+                <div class="admin-corrigir-linha">
+                    <input type="text" id="regional-pedido" class="pin-input" placeholder="Pedido (ex.: 12345)" inputmode="numeric" autocomplete="off">
+                    <select id="regional-escolha" class="corrigir-select"></select>
+                    <button class="btn btn-carregado" id="btn-regional-definir">Definir</button>
+                    <button class="btn btn-desfazer" id="btn-regional-desfazer">Desfazer</button>
+                </div>
+                <div class="admin-corrigir-ajuda">Só para pedido que veio sem regional do Protheus. Quando o Protheus mandar a regional, ela passa a valer no lugar desta. Fica registrado quem definiu.</div>
+                <div class="pin-erro" id="regional-msg"></div>
+                <div class="admin-corrigir-ajuda" id="regional-listas"></div>
+            </div>
+
             <div class="admin-search">
                 <input type="text" id="admin-search-input" class="pin-input" placeholder="Buscar carga (ex.: 1400)" autocomplete="off" oninput="renderizarAdmin()">
             </div>
@@ -285,6 +308,8 @@
             <div class="clock-panel">
                 <div id="clock-time">00:00:00</div>
                 <div id="clock-date">--/--/----</div>
+                <div id="clock-visao"></div>
+                <button type="button" class="admin-sair clock-sair" id="btn-trocar-usuario">Trocar usuário</button>
             </div>
         </div>
     </div>
@@ -303,6 +328,15 @@
         var CHAVE_SENHA = "painel-expedicao-senha";
         var CHAVE_ADMIN = "painel-expedicao-admin";   // acesso do administrador guardado neste navegador (só se marcar "Manter conectado")
         var DIAS_CONECTADO = 30;
+        // Fase 8: cada acesso tem usuário (Geral ou o nome de uma regional) e senha; a visão vem do servidor.
+        var LOGIN_URL = SUPABASE_URL + "/rest/v1/rpc/login_painel";
+        var VISAO_URL = SUPABASE_URL + "/rest/v1/quadro_visao";
+        var ENTREGAS_VISAO_REST = SUPABASE_URL + "/rest/v1/entregas_visao";
+        var REGIONAL_URL = SUPABASE_URL + "/functions/v1/regional";
+        var CHAVE_VISAO = "painel-expedicao-visao";   // { usuario, visao, nome } do último login neste navegador
+        var usuarioPainel = "Geral";
+        var visao = "GERAL";                          // "GERAL" ou a chave da regional
+        var nomeVisao = "Geral";
 
         var COLUNAS = ["a_separar", "separando", "separado", "faturar", "a_carregar", "carregando", "carregado", "em_transito"];
         var CLASSE_COR = {
@@ -350,11 +384,13 @@
         updateClock();
         setInterval(updateClock, 1000);
 
-        // ---- dados do painel (leitura direta do banco; a senha vai no cabeçalho e é conferida lá) ----
+        // ---- dados do painel (leitura direta do banco; usuário e senha vão nos cabeçalhos e são conferidos lá) ----
+        function cabecalhosPainel() {
+            return { apikey: SUPABASE_ANON, "x-usuario-painel": usuarioPainel, "x-senha-painel": senhaPainel, Accept: "application/json" };
+        }
         function consultarPainel(select) {
-            return fetch(PAINEL_URL + "?id=eq.1&select=" + select, {
-                headers: { apikey: SUPABASE_ANON, "x-senha-painel": senhaPainel, Accept: "application/json" }, cache: "no-store"
-            }).then(function (r) {
+            var url = visao === "GERAL" ? PAINEL_URL + "?id=eq.1&select=" + select : VISAO_URL + "?visao=eq." + encodeURIComponent(visao) + "&select=" + select;
+            return fetch(url, { headers: cabecalhosPainel(), cache: "no-store" }).then(function (r) {
                 if (!r.ok) throw new Error("http " + r.status);
                 return r.json();
             }).then(function (linhas) { return linhas.length ? linhas[0] : null; });   // vazio = senha errada ou painel sem dados
@@ -410,7 +446,7 @@
         function ciclo() {
             buscarPainel(false).then(function (ok) {
                 if (ok === false && painelIniciado) {   // a senha foi trocada no banco
-                    try { localStorage.removeItem(CHAVE_SENHA); } catch (e) {}
+                    try { localStorage.removeItem(CHAVE_SENHA); localStorage.removeItem(CHAVE_VISAO); } catch (e) {}
                     location.reload();
                 }
             }).catch(function () {
@@ -421,35 +457,57 @@
         // ---- portão de senha de visualização ----
         function iniciarPainel() {
             document.getElementById("modal-gate").classList.remove("active");
+            document.getElementById("clock-visao").textContent = visao === "GERAL" ? "" : "Visão: " + nomeVisao;
             painelIniciado = true;
             setInterval(ciclo, INTERVALO_PAINEL_MS);
             buscarEntregas();
             setInterval(buscarEntregas, INTERVALO_ENTREGAS_MS);
         }
+        function guardarLogin(usuario, senha, v, nome) {
+            try {
+                localStorage.setItem(CHAVE_SENHA, senha);
+                localStorage.setItem(CHAVE_VISAO, JSON.stringify({ usuario: usuario, visao: v, nome: nome }));
+            } catch (e) {}
+        }
+        function esquecerLogin() {
+            try { localStorage.removeItem(CHAVE_SENHA); localStorage.removeItem(CHAVE_VISAO); } catch (e) {}
+        }
         function tentarEntrar() {
-            var input = document.getElementById("gate-input");
             var erro = document.getElementById("gate-erro");
-            var senha = input.value;
-            if (!senha) return;
-            senhaPainel = senha;
+            var usuario = document.getElementById("gate-usuario").value.trim();
+            var senha = document.getElementById("gate-input").value;
+            if (!usuario || !senha) { erro.textContent = "Informe o usuário e a senha."; return; }
             erro.textContent = "Verificando...";
-            buscarPainel(true).then(function (ok) {
-                if (ok) {
-                    try { localStorage.setItem(CHAVE_SENHA, senha); } catch (e) {}
-                    iniciarPainel();
-                } else {
-                    senhaPainel = "";
-                    erro.textContent = "Senha incorreta ou painel ainda sem dados.";
-                    input.value = "";
-                    input.focus();
+            fetch(LOGIN_URL, {
+                method: "POST", cache: "no-store",
+                headers: { apikey: SUPABASE_ANON, "Content-Type": "application/json", Accept: "application/json" },
+                body: JSON.stringify({ p_usuario: usuario, p_senha: senha })
+            }).then(function (r) {
+                if (!r.ok) throw new Error("http " + r.status);
+                return r.json();
+            }).then(function (resp) {
+                if (!resp || !resp.ok) {
+                    erro.textContent = "Usuário ou senha incorretos.";   // a mesma mensagem para usuário e senha errados
+                    document.getElementById("gate-input").value = "";
+                    document.getElementById("gate-input").focus();
+                    return;
                 }
+                usuarioPainel = usuario; senhaPainel = senha; visao = resp.visao; nomeVisao = resp.nome || usuario;
+                return buscarPainel(true).then(function (ok) {
+                    if (ok) { guardarLogin(usuario, senha, visao, nomeVisao); iniciarPainel(); return; }
+                    senhaPainel = ""; visao = "GERAL";
+                    erro.textContent = "Ainda não há dados para esta visão. Tente de novo em instantes.";
+                });
             }).catch(function () {
                 senhaPainel = "";
                 erro.textContent = "Não foi possível conectar. Tente de novo.";
             });
         }
         document.getElementById("btn-gate").addEventListener("click", tentarEntrar);
-        document.getElementById("gate-input").addEventListener("keypress", function (e) { if (e.key === "Enter") tentarEntrar(); });
+        ["gate-usuario", "gate-input"].forEach(function (id) {
+            document.getElementById(id).addEventListener("keypress", function (e) { if (e.key === "Enter") tentarEntrar(); });
+        });
+        document.getElementById("btn-trocar-usuario").addEventListener("click", function () { esquecerLogin(); location.reload(); });
 
         // ---- tela de administrador (usuário + PIN individual, conferidos no servidor) ----
         function chamarAdmin(corpo) {
@@ -465,6 +523,9 @@
             sessaoAdmin.nome = resposta.nome;
             adminCds = resposta.admin_cds || [];
             document.getElementById("admin-corrigir").hidden = resposta.perfil !== "admin";
+            document.getElementById("admin-regional").hidden = resposta.perfil !== "admin";
+            document.getElementById("regional-msg").textContent = "";
+            if (resposta.perfil === "admin") carregarResumoRegional();
             document.getElementById("corrigir-msg").textContent = "";
             document.getElementById("admin-quem").textContent = "Acesso de " + resposta.nome + (resposta.perfil === "admin" ? " (administrador)" : "");
             fecharModal("modal-pin");
@@ -595,6 +656,69 @@
         document.getElementById("btn-corrigir").addEventListener("click", corrigirStatus);
         document.getElementById("corrigir-carga").addEventListener("keypress", function (e) { if (e.key === "Enter") corrigirStatus(); });
 
+        // ---- regional de pedido que veio sem (só administrador): função "regional" ----
+        function chamarRegional(corpo) {
+            return fetch(REGIONAL_URL, {
+                method: "POST", headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON },
+                body: JSON.stringify(Object.assign({ usuario: sessaoAdmin.usuario, pin: sessaoAdmin.pin }, corpo))
+            }).then(function (r) {
+                return r.json().catch(function () { return {}; }).then(function (dados) { return { status: r.status, dados: dados }; });
+            });
+        }
+        function carregarResumoRegional() {
+            var sel = document.getElementById("regional-escolha");
+            var listas = document.getElementById("regional-listas");
+            chamarRegional({ op: "resumo" }).then(function (r) {
+                if (r.status !== 200) { listas.textContent = r.dados.detail || "Não foi possível carregar as regionais."; return; }
+                var d = r.dados;
+                sel.innerHTML = "";
+                (d.regionais || []).forEach(function (nome) {
+                    var o = document.createElement("option"); o.value = nome; o.textContent = nome; sel.appendChild(o);
+                });
+                var html = "";
+                var sem = d.sem_regional || [];
+                html += sem.length
+                    ? "Pedidos sem regional agora (" + sem.length + "), clique para escolher: " + sem.slice(0, 30).map(function (p) {
+                        return '<span class="res-link" role="button" data-pedido-regional="' + escapeHtml(p.pedido) + '">' + escapeHtml(p.pedido) + " (carga " + escapeHtml(p.carga) + ")</span>";
+                    }).join("") + (sem.length > 30 ? " …" : "")
+                    : "Nenhum pedido sem regional agora.";
+                var novas = d.novas || [];
+                if (novas.length) {
+                    html += "<br>Regionais que vieram do Protheus e não estão na tabela: " + novas.map(function (n) {
+                        return escapeHtml(n.texto) + " (" + escapeHtml(n.pedidos) + (n.pedidos === 1 ? " pedido)" : " pedidos)");
+                    }).join(", ") + ".";
+                }
+                listas.innerHTML = html;
+            }).catch(function () { listas.textContent = "Erro de comunicação com o servidor."; });
+        }
+        function acaoRegional(op) {
+            if (!sessaoAdmin || sessaoAdmin.perfil !== "admin") return;
+            var pedido = document.getElementById("regional-pedido").value.trim();
+            var regional = document.getElementById("regional-escolha").value;
+            var msg = document.getElementById("regional-msg");
+            if (!/^[0-9]+$/.test(pedido)) { msg.textContent = "Informe só o número do pedido."; return; }
+            if (op === "definir" && !confirm("Definir a regional do pedido " + pedido + " como " + regional + "?")) return;
+            if (op === "desfazer" && !confirm("Desfazer a regional definida manualmente para o pedido " + pedido + "?")) return;
+            msg.textContent = "Aplicando...";
+            chamarRegional({ op: op, pedido: pedido, regional: regional }).then(function (r) {
+                if (r.status === 200) {
+                    msg.textContent = op === "definir" ? "Pedido " + pedido + ": regional " + r.dados.regional + ". As visões se atualizam em até 1 minuto."
+                                                       : "Pedido " + pedido + ": definição manual desfeita.";
+                    document.getElementById("regional-pedido").value = "";
+                    carregarResumoRegional();
+                    return;
+                }
+                if (r.status === 401 || r.status === 423) { fecharModal("modal-admin"); return; }
+                msg.textContent = r.dados.detail || "Não foi possível alterar a regional.";
+            }).catch(function () { msg.textContent = "Erro de comunicação com o servidor."; });
+        }
+        document.getElementById("btn-regional-definir").addEventListener("click", function () { acaoRegional("definir"); });
+        document.getElementById("btn-regional-desfazer").addEventListener("click", function () { acaoRegional("desfazer"); });
+        document.getElementById("regional-listas").addEventListener("click", function (e) {
+            var alvo = e.target.closest("[data-pedido-regional]");
+            if (alvo) document.getElementById("regional-pedido").value = alvo.dataset.pedidoRegional;
+        });
+
         function renderizarAdmin() {
             var lista = document.getElementById("admin-list-content");
             lista.innerHTML = "";
@@ -708,7 +832,8 @@ function processarEntregas(dados) {
         var reg = {
             pedido: chave, carga: cargaNumero(col(c, "ROMANEIO")),
             previsao: parseData(col(c, "PREVISAO DE ENTREGA")), entregue: parseData(col(c, "ENTREGA REALIZADA")),
-            crm: crm, crmChave: normalizaCrm(crm), expedicao: parseData(col(c, "DATA DE EXPEDICAO"))
+            crm: crm, crmChave: normalizaCrm(crm), expedicao: parseData(col(c, "DATA DE EXPEDICAO")),
+            regional: col(c, "REGIONAL"), regionalTipo: col(c, "REGIONAL_TIPO")
         };
         (porPedido[chave] = porPedido[chave] || []).push(reg);
         if (reg.carga) (porCarga[reg.carga] = porCarga[reg.carga] || []).push(reg);
@@ -724,8 +849,8 @@ function processarEntregas(dados) {
 }
 // Leitura direta da tabela entregas (a senha de visualização vai no cabeçalho e é conferida no banco).
 function consultarEntregas(select) {
-    return fetch(ENTREGAS_REST + "?id=eq.1&select=" + select, {
-        headers: { apikey: SUPABASE_ANON, "x-senha-painel": senhaPainel, Accept: "application/json" }, cache: "no-store"
+    return fetch(ENTREGAS_VISAO_REST + "?visao=eq." + encodeURIComponent(visao) + "&select=" + select, {
+        headers: cabecalhosPainel(), cache: "no-store"
     }).then(function (r) {
         if (!r.ok) throw new Error("http " + r.status);
         return r.json();
@@ -814,12 +939,20 @@ function linkPedido(pedido) {
     return '<span class="res-link" role="button" data-pedido="' + escapeHtml(pedido) + '">' + escapeHtml(pedidoCom6(pedido)) + "</span>";
 }
 
+// Etiqueta discreta com a regional do pedido (só na visão Geral). Regional fora da tabela ou pedido sem regional: cor de aviso.
+function etiquetaRegional(reg) {
+    if (visao !== "GERAL" || !reg || !reg.regionalTipo) return "";
+    if (reg.regionalTipo === "sem") return '<span class="tag-reg aviso" title="Pedido sem regional no Protheus">sem regional</span>';
+    if (!reg.regional) return "";
+    if (reg.regionalTipo === "nova") return '<span class="tag-reg aviso" title="Regional que não está na tabela do painel">' + escapeHtml(reg.regional) + "</span>";
+    return '<span class="tag-reg">' + escapeHtml(reg.regional) + "</span>";
+}
 // Bloco de uma ocorrência do pedido: carga, status da carga e situação do pedido nela.
 function blocoOcorrencia(reg, mostrarPedido) {
     var achado = localizarCarga(reg.carga);
     var sit = situacaoPedido(reg, achado ? achado.coluna : null);
     var html = '<div class="res-bloco">';
-    if (mostrarPedido) html += '<div class="res-pedido">Pedido: ' + linkPedido(reg.pedido) + "</div>";
+    if (mostrarPedido) html += '<div class="res-pedido">Pedido: ' + linkPedido(reg.pedido) + etiquetaRegional(reg) + "</div>";
     if (reg.crm) html += '<div class="res-linha">CRM: ' + escapeHtml(reg.crm) + "</div>";
     if (reg.carga) {
         html += '<div class="res-carga">Carga: ' + linkCarga(reg.carga) + " · Status: " + escapeHtml(statusDaCarga(reg.carga, achado)) + "</div>";
@@ -846,7 +979,7 @@ function linhaDupla(rotEsq, dataEsq, rotDir, dataDir) {
 function itemLista(reg, coluna) {
     var sit = situacaoPedido(reg, coluna);
     var prev = previsoes && previsoes.porCarga[reg.carga];
-    return '<div class="res-item res-clicavel" role="button" data-pedido="' + escapeHtml(reg.pedido) + '"><div class="res-item-topo"><span class="res-item-ped">' + escapeHtml(pedidoCom6(reg.pedido)) + "</span>" +
+    return '<div class="res-item res-clicavel" role="button" data-pedido="' + escapeHtml(reg.pedido) + '"><div class="res-item-topo"><span class="res-item-ped">' + escapeHtml(pedidoCom6(reg.pedido)) + etiquetaRegional(reg) + "</span>" +
         '<span class="res-item-st" style="color: ' + sit.cor + '">' + escapeHtml(sit.texto) + "</span></div>" +
         linhaDupla("Data entregue", reg.entregue, "Data expedição", reg.expedicao) +
         linhaDupla("Previsão entrega", reg.previsao, "Previsão expedição", prev ? prev.data : null) + "</div>";
@@ -904,7 +1037,7 @@ function buscarPedido(valor) {
             'Pedido não encontrado.<div class="res-orienta">Por favor, verifique com o time de Transportes.</div>' + rodapeEntregas();
         return;
     }
-    var html = '<div class="res-pedido">Pedido: ' + escapeHtml(pedidoCom6(chave)) + "</div>";
+    var html = '<div class="res-pedido">Pedido: ' + escapeHtml(pedidoCom6(chave)) + etiquetaRegional(regs[0]) + "</div>";
     regs.slice(0, LIMITE_CARGAS_PEDIDO).forEach(function (reg) { html += blocoOcorrencia(reg); });
     if (regs.length > LIMITE_CARGAS_PEDIDO) {
         var resto = regs.length - LIMITE_CARGAS_PEDIDO;
@@ -987,7 +1120,7 @@ function parseDataIso(txt) {
     return { txt: m[3] + "/" + m[2] + "/" + m[1], t: t };
 }
 function consultarTabela(url) {
-    return fetch(url, { headers: { apikey: SUPABASE_ANON, "x-senha-painel": senhaPainel, Accept: "application/json" }, cache: "no-store" })
+    return fetch(url, { headers: cabecalhosPainel(), cache: "no-store" })
         .then(function (r) {
             if (!r.ok) throw new Error("http " + r.status);
             return r.json();
@@ -1102,19 +1235,21 @@ document.getElementById("modal-search").addEventListener("click", function (e) {
     if (anterior) abrirVista(anterior.tipo, anterior.valor, "voltar");
 });
 
-        // ---- início: senha guardada neste navegador (a TV digita uma vez) ----
+        // ---- início: login guardado neste navegador (a TV digita uma vez; quem só tem a senha antiga guardada entra como Geral) ----
         (function () {
-            var guardada = "";
-            try { guardada = localStorage.getItem(CHAVE_SENHA) || ""; } catch (e) {}
-            if (!guardada) { document.getElementById("gate-input").focus(); return; }
+            var guardada = "", g = null;
+            try { guardada = localStorage.getItem(CHAVE_SENHA) || ""; g = JSON.parse(localStorage.getItem(CHAVE_VISAO) || "null"); } catch (e) {}
+            if (!guardada) { document.getElementById("gate-usuario").focus(); return; }
             senhaPainel = guardada;
+            if (g && g.usuario && g.visao) { usuarioPainel = g.usuario; visao = g.visao; nomeVisao = g.nome || g.usuario; }
+            document.getElementById("gate-usuario").value = usuarioPainel;
             buscarPainel(true).then(function (ok) {
                 if (ok) { iniciarPainel(); return; }
-                try { localStorage.removeItem(CHAVE_SENHA); } catch (e) {}
-                senhaPainel = "";
-                document.getElementById("gate-erro").textContent = "Senha incorreta ou alterada. Digite de novo.";
+                esquecerLogin();
+                senhaPainel = ""; usuarioPainel = "Geral"; visao = "GERAL";
+                document.getElementById("gate-erro").textContent = "Usuário ou senha incorretos ou alterados. Entre de novo.";
             }).catch(function () {
-                // sem rede agora: tenta de novo em instantes com a senha guardada
+                // sem rede agora: tenta de novo em instantes com o login guardado
                 mostrarAviso("Dados do Protheus temporariamente indisponíveis. As informações exibidas podem estar desatualizadas.");
                 iniciarPainel();
             });
