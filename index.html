@@ -286,10 +286,9 @@
                     <label class="historico-campo">Até <input type="date" id="historico-ate" class="pin-input"></label>
                     <select id="historico-regional" class="corrigir-select"><option value="">Todas as regionais</option></select>
                 </div>
+                <br>
                 <div class="admin-corrigir-linha">
-                    <button class="btn btn-carregado" id="btn-historico-pedidos">Baixar pedidos (CSV)</button>
-                    <button class="btn btn-desfazer" id="btn-historico-etapas">Baixar mudanças de etapa (CSV)</button>
-                    <button class="btn btn-desfazer" id="btn-historico-datas">Baixar mudanças de data (CSV)</button>
+                    <button class="btn btn-carregado" id="btn-historico-excel">Baixar histórico (Excel)</button>
                 </div>
                 <div class="pin-erro" id="historico-msg"></div>
             </div>
@@ -723,13 +722,16 @@
                 regional: document.getElementById("historico-regional").value
             }).then(function (r) {
                 if (r.status === 200) {
-                    var blob = new Blob([r.dados.csv], { type: "text/csv;charset=utf-8" });
+                    var bin = atob(r.dados.xlsx), bytes = new Uint8Array(bin.length);
+                    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+                    var blob = new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
                     var url = URL.createObjectURL(blob);
                     var a = document.createElement("a");
-                    a.href = url; a.download = r.dados.arquivo || "historico.csv";
+                    a.href = url; a.download = r.dados.arquivo || "historico.xlsx";
                     document.body.appendChild(a); a.click(); a.remove();
                     setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
-                    msg.textContent = r.dados.linhas + (r.dados.linhas === 1 ? " linha baixada." : " linhas baixadas.") +
+                    msg.textContent = "Arquivo gerado: " + r.dados.linhas_pedidos + (r.dados.linhas_pedidos === 1 ? " pedido" : " pedidos") + " e " + r.dados.linhas_etapas +
+                        (r.dados.linhas_etapas === 1 ? " mudança de etapa." : " mudanças de etapa.") +
                         (r.dados.truncado ? " Atenção: o arquivo foi limitado; escolha um período menor." : "");
                     return;
                 }
@@ -737,9 +739,7 @@
                 msg.textContent = r.dados.detail || "Não foi possível gerar o arquivo.";
             }).catch(function () { msg.textContent = "Erro de comunicação com o servidor."; });
         }
-        document.getElementById("btn-historico-pedidos").addEventListener("click", function () { baixarHistorico("pedidos"); });
-        document.getElementById("btn-historico-etapas").addEventListener("click", function () { baixarHistorico("etapas"); });
-        document.getElementById("btn-historico-datas").addEventListener("click", function () { baixarHistorico("datas"); });
+        document.getElementById("btn-historico-excel").addEventListener("click", function () { baixarHistorico("excel"); });
 
         // ---- regional de pedido que veio sem (só administrador): função "regional" ----
         function chamarRegional(corpo) {
