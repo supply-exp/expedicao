@@ -281,7 +281,6 @@
             </div>
 
             <div class="admin-corrigir admin-painel" id="admin-historico">
-                <div class="admin-corrigir-ajuda" id="historico-resumo">Carregando...</div>
                 <div class="admin-corrigir-linha">
                     <label class="historico-campo">De <input type="date" id="historico-de" class="pin-input"></label>
                     <label class="historico-campo">Até <input type="date" id="historico-ate" class="pin-input"></label>
@@ -290,8 +289,8 @@
                 <div class="admin-corrigir-linha">
                     <button class="btn btn-carregado" id="btn-historico-pedidos">Baixar pedidos (CSV)</button>
                     <button class="btn btn-desfazer" id="btn-historico-etapas">Baixar mudanças de etapa (CSV)</button>
+                    <button class="btn btn-desfazer" id="btn-historico-datas">Baixar mudanças de data (CSV)</button>
                 </div>
-                <div class="admin-corrigir-ajuda">Pedidos: um por linha, com carga, regional, CD, datas de expedição, previsão e entrega e se foi no prazo (período pela data de expedição; sem ela, pela data em que apareceu no painel). Mudanças de etapa: cada passagem de uma carga de uma etapa para outra, com data e hora. O filtro de regional vale só para os pedidos. Datas em branco = tudo. O arquivo abre direto no Excel.</div>
                 <div class="pin-erro" id="historico-msg"></div>
             </div>
 
@@ -575,7 +574,7 @@
             alternarPainelAdmin(null);
             document.getElementById("regional-msg").textContent = "";
             document.getElementById("historico-msg").textContent = "";
-            if (resposta.perfil === "admin") { carregarResumoRegional(); carregarResumoHistorico(); }
+            if (resposta.perfil === "admin") { carregarResumoRegional(); }
             document.getElementById("corrigir-msg").textContent = "";
             document.getElementById("admin-quem").textContent = "Acesso de " + resposta.nome + (resposta.perfil === "admin" ? " (administrador)" : "");
             fecharModal("modal-pin");
@@ -715,16 +714,6 @@
                 return r.json().catch(function () { return {}; }).then(function (dados) { return { status: r.status, dados: dados }; });
             });
         }
-        function carregarResumoHistorico() {
-            var alvo = document.getElementById("historico-resumo");
-            chamarHistorico({ op: "resumo" }).then(function (r) {
-                if (r.status !== 200) { alvo.textContent = r.dados.detail || "Não foi possível carregar o resumo do histórico."; return; }
-                var d = r.dados;
-                if (!d.pedidos && !d.mudancas_etapa) { alvo.textContent = "O histórico ainda não começou a ser gravado."; return; }
-                alvo.textContent = "Guardado: " + d.pedidos + " pedidos de " + d.cargas + " cargas" + (d.desde ? " (de " + d.desde + " a " + d.ate + ")" : "") +
-                    " e " + d.mudancas_etapa + " mudanças de etapa" + (d.etapas_desde ? " detectadas desde " + d.etapas_desde : "") + ". Guarda 3 anos.";
-            }).catch(function () { alvo.textContent = "Erro de comunicação com o servidor."; });
-        }
         function baixarHistorico(op) {
             if (!sessaoAdmin || sessaoAdmin.perfil !== "admin") return;
             var msg = document.getElementById("historico-msg");
@@ -750,6 +739,7 @@
         }
         document.getElementById("btn-historico-pedidos").addEventListener("click", function () { baixarHistorico("pedidos"); });
         document.getElementById("btn-historico-etapas").addEventListener("click", function () { baixarHistorico("etapas"); });
+        document.getElementById("btn-historico-datas").addEventListener("click", function () { baixarHistorico("datas"); });
 
         // ---- regional de pedido que veio sem (só administrador): função "regional" ----
         function chamarRegional(corpo) {
