@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard Expedição - Gênica</title>
+    <!-- Segurança (08/10/2026): a página só carrega o que está nela e só fala com o Supabase; nada de frames, formulários ou <base>. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src https://*.supabase.co; base-uri 'none'; form-action 'none'">
     <style>
         :root {
             --genica-white: #FFFFFF;
@@ -382,6 +384,8 @@
                 return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
             });
         }
+        // Texto que o servidor já escapou (&amp; &#x27; ...) de volta ao original, para depois escapar de novo ao pôr em atributo.
+        function desescapar(s) { var t = document.createElement("textarea"); t.innerHTML = String(s); return t.value; }
         function normaliza(rom) { return String(rom || "").replace(/^0+/, ""); }
         function mostrarAviso(texto) {
             var el = document.getElementById("protheus-alert");
@@ -489,7 +493,7 @@
         function tentarEntrar() {
             var erro = document.getElementById("gate-erro");
             var usuario = document.getElementById("gate-usuario").value.trim();
-            var senha = document.getElementById("gate-input").value;
+            var senha = document.getElementById("gate-input").value.trim();   // ignora espaço colado junto da senha
             if (!usuario || !senha) { erro.textContent = "Informe o usuário e a senha."; return; }
             erro.textContent = "Verificando...";
             fetch(LOGIN_URL, {
@@ -608,7 +612,7 @@
             var btn = document.getElementById("btn-submit-pin");
             var erro = document.getElementById("pin-erro");
             var usuario = document.getElementById("usuario-input").value.trim();
-            var pin = document.getElementById("pin-input").value;
+            var pin = document.getElementById("pin-input").value.trim();   // idem para o PIN
             if (!usuario || !pin) { erro.textContent = "Informe o usuário e o PIN."; return; }
             sessaoAdmin = { usuario: usuario, pin: pin };
             btn.disabled = true;
@@ -745,6 +749,10 @@
             if (alvo) document.getElementById("regional-pedido").value = alvo.dataset.pedidoRegional;
         });
 
+        document.getElementById("admin-list-content").addEventListener("click", function (e) {
+            var b = e.target.closest("button[data-acao]");
+            if (b) alterarStatus(b.dataset.rom, b.dataset.acao, b.dataset.destino);
+        });
         function renderizarAdmin() {
             var lista = document.getElementById("admin-list-content");
             lista.innerHTML = "";
@@ -767,9 +775,11 @@
                 var btns = "";
                 var proxima = { CARREGANDO: ["btn-carregando", "CARREGANDO"], CARREGADO: ["btn-carregado", "CARREGADO"],
                                 EM_TRANSITO: ["btn-transito", "EM TRÂNSITO"], ENTREGUE: ["btn-carregado", "ENTREGUE"] }[cd.proxima_acao];
-                if (proxima) btns += '<button class="btn ' + proxima[0] + '" onclick="alterarStatus(\'' + cd.romaneio + '\', \'' + cd.proxima_acao + '\')">' + proxima[1] + "</button>";
-                if (cd.desfazer_para) btns += '<button class="btn btn-desfazer" onclick="alterarStatus(\'' + cd.romaneio + '\', \'DESFAZER\', \'' + cd.desfazer_para + '\')">DESFAZER</button>';
-                if (podeRemover && !cd.is_finalizado) btns += '<button class="btn btn-remover" onclick="alterarStatus(\'' + cd.romaneio + '\', \'REMOVER\')">REMOVER</button>';
+                // O número da carga e o destino vão em atributos data- (nada é montado dentro de código JavaScript); o clique é tratado em um só lugar, abaixo.
+                var dados = ' data-rom="' + escapeHtml(desescapar(cd.romaneio)) + '"';
+                if (proxima) btns += '<button class="btn ' + proxima[0] + '"' + dados + ' data-acao="' + cd.proxima_acao + '">' + proxima[1] + "</button>";
+                if (cd.desfazer_para) btns += '<button class="btn btn-desfazer"' + dados + ' data-acao="DESFAZER" data-destino="' + escapeHtml(desescapar(cd.desfazer_para)) + '">DESFAZER</button>';
+                if (podeRemover && !cd.is_finalizado) btns += '<button class="btn btn-remover"' + dados + ' data-acao="REMOVER">REMOVER</button>';
                 var aviso = cd.sem_retorno_desde ? '<div class="admin-item-aviso">Sem retorno do Protheus desde ' + cd.sem_retorno_desde + "</div>" : "";
                 item.innerHTML =
                     '<div class="admin-item-info">' +
